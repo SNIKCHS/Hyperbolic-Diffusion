@@ -1,0 +1,6 @@
+
+manifolds/__pycache__/euclidean.cpython-39.pyc
+*.pyc
+*.db
+.idea/vcs.xml
+*.npz
