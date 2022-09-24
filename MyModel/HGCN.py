@@ -108,25 +108,28 @@ class RegModel(nn.Module):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
-            # hgc_layers.append(
-            #     hyp_layers.HyperbolicGraphConvolution(  # 设置每一层的卷积操作 return h, adj
-            #         self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att,
-            #         args.local_agg
-            #     )
-            # )
             hgc_layers.append(
-                hyp_layers.HNNLayer(
-                    self.manifold, in_dim, out_dim, self.c, args.dropout, act, args.bias
+                hyp_layers.HyperbolicGraphConvolution(  # 设置每一层的卷积操作 return h, adj
+                    self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att,
+                    args.local_agg
                 )
             )
+            # hgc_layers.append(
+            #     hyp_layers.HNNLayer(
+            #         self.manifold, in_dim, out_dim, self.c, args.dropout, act, args.bias
+            #     )
+            # )
         self.encoder = nn.Sequential(*hgc_layers)
         self.decoder = nn.Sequential(
-            nn.Linear(args.dim, 1),
+            nn.Linear(args.dim, args.dim, args.bias),
+            nn.Linear(args.dim, args.dim, args.bias),
+            nn.Linear(args.dim, args.dim, args.bias),
+            nn.Linear(args.dim, 1, args.bias),
         )
 
     def encode(self, x, adj):
 
-        h = self.encoder(x)
+        h = self.encoder((x,adj))
         return h
 
     def decode(self, h, adj):
@@ -150,7 +153,7 @@ class RegModel(nn.Module):
             o = torch.zeros_like(x)
             x = torch.cat([o[:, :, 0:1], x], dim=2)  # (b,n_atom,feat_dim)
 
-        h = self.encode(x, adj)
+        h,_ = self.encode(x, adj)
         output = self.decode(h,adj)
 
         return torch.sum(output,dim=1)
