@@ -18,7 +18,7 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 30,
+        'lr_reduce_freq': 20,
         'gamma': 0.5,
         'print-epoch': True,
 
@@ -34,7 +34,7 @@ config_args = {
         'n_atom_embed': 8, # 'atom embedding dimension'),
         'max_z': 100,   #'atom type'),
         'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
-        'c': 1,  # 'hyperbolic radius, set to None for trainable curvature'),
+        'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
         'r': 2.,  # 'fermi-dirac decoder parameter for lp'),
         't': 1., # 'fermi-dirac decoder parameter for lp'),
         'pretrained-embeddings': None,  # 'path to pretrained embeddings (.npy file) for Shallow node classification'),

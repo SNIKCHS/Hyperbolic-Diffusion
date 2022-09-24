@@ -3,7 +3,7 @@ from schnetpack import Properties
 from torch import nn
 from old import hyp_layers
 from manifolds.hyperboloid import Hyperboloid
-
+import torch.nn.functional as F
 
 class Encoder(nn.Module):
     """
@@ -83,6 +83,30 @@ class RegModel(nn.Module):
     数据先proj_tan0再expmap0
     """
 
+    def get_dim_act_curv(self,args):
+        """
+        Helper function to get dimension and activation at every layer.
+        :param args:
+        :return:
+        """
+        if not args.act:
+            act = lambda x: x
+        else:
+            act = getattr(F, args.act)
+        acts = [act] * (args.num_layers)  # len=args.num_layers
+        dims = [args.feat_dim] + ([args.dim] * (args.num_layers))  # len=args.num_layers+1
+        n_curvatures = args.num_layers  # len=args.num_layers 出去后会+1
+
+        if args.c is None:
+            # create list of trainable curvature parameters
+            curvatures = nn.ParameterList([nn.Parameter(torch.Tensor([1])) for _ in range(n_curvatures)])
+        else:
+            # fixed curvature
+            curvatures = [torch.tensor([args.c]) for _ in range(n_curvatures)]
+            if not args.cuda == -1:
+                curvatures = [curv.to(args.device) for curv in curvatures]
+        return dims, acts, curvatures
+
     def __init__(self, args):
         super(RegModel, self).__init__()
         self.manifold_name = args.manifold
@@ -100,7 +124,7 @@ class RegModel(nn.Module):
         """
         Encoder
         """
-        dims, acts, self.curvatures = hyp_layers.get_dim_act_curv(args)  # 从参数中获取每一层的维度、激活和曲率
+        dims, acts, self.curvatures = self.get_dim_act_curv(args)  # 从参数中获取每一层的维度、激活和曲率
         self.curvatures.append(self.c)
         hgc_layers = []
 
@@ -108,17 +132,17 @@ class RegModel(nn.Module):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
-            hgc_layers.append(
-                hyp_layers.HyperbolicGraphConvolution(  # 设置每一层的卷积操作 return h, adj
-                    self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att,
-                    args.local_agg
-                )
-            )
             # hgc_layers.append(
-            #     hyp_layers.HNNLayer(
-            #         self.manifold, in_dim, out_dim, self.c, args.dropout, act, args.bias
+            #     hyp_layers.HyperbolicGraphConvolution(  # 设置每一层的卷积操作 return h, adj
+            #         self.manifold, in_dim, out_dim, c_in, c_out, args.dropout, act, args.bias, args.use_att,
+            #         args.local_agg
             #     )
             # )
+            hgc_layers.append(
+                hyp_layers.HNNLayer(
+                    self.manifold, in_dim, out_dim, c_in,c_out, args.dropout, act, args.bias
+                )
+            )
         self.encoder = nn.Sequential(*hgc_layers)
         self.decoder = nn.Sequential(
             nn.Linear(args.dim, args.dim, args.bias),
@@ -129,8 +153,15 @@ class RegModel(nn.Module):
 
     def encode(self, x, adj):
 
-        h = self.encoder((x,adj))
-        return h
+        x_tan = self.manifold.proj_tan0(x, self.curvatures[0])  # 把x（欧式向量）投影到原点的切空间
+        x_hyp = self.manifold.expmap0(x_tan, c=self.curvatures[0])  # 在原点把x_tan指数映射
+        input = (x_hyp, adj)
+        output = self.encoder(x_hyp)  # 产生了NaN
+        output = self.manifold.logmap0(output, self.c)
+        output = self.manifold.proj_tan0(output, self.c)
+
+        # h = self.encoder((x,adj))
+        return output
 
     def decode(self, h, adj):
         return self.decoder(h)
@@ -153,7 +184,7 @@ class RegModel(nn.Module):
             o = torch.zeros_like(x)
             x = torch.cat([o[:, :, 0:1], x], dim=2)  # (b,n_atom,feat_dim)
 
-        h,_ = self.encode(x, adj)
+        h = self.encode(x, adj)
         output = self.decode(h,adj)
 
         return torch.sum(output,dim=1)

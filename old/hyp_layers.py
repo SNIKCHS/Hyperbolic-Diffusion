@@ -26,7 +26,7 @@ def get_dim_act_curv(args):
 
     if args.c is None:
         # create list of trainable curvature parameters
-        curvatures = [nn.Parameter(torch.Tensor([1.])) for _ in range(n_curvatures)]
+        curvatures = nn.ParameterList([nn.Parameter(torch.Tensor([1.])) for _ in range(n_curvatures)])
     else:
         # fixed curvature
         curvatures = [torch.tensor([args.c]) for _ in range(n_curvatures)]
@@ -40,10 +40,10 @@ class HNNLayer(nn.Module):
     Hyperbolic neural networks layer.
     """
 
-    def __init__(self, manifold, in_features, out_features, c, dropout, act, use_bias):
+    def __init__(self, manifold, in_features, out_features, c_in,c_out, dropout, act, use_bias):
         super(HNNLayer, self).__init__()
-        self.linear = HypLinear(manifold, in_features, out_features, c, dropout, use_bias)
-        self.hyp_act = HypAct(manifold, c, c, act)
+        self.linear = HypLinear(manifold, in_features, out_features, c_in, dropout, use_bias)
+        self.hyp_act = HypAct(manifold, c_in, c_out, act)
 
     def forward(self, x):
         h = self.linear.forward(x)
