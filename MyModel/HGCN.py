@@ -2,7 +2,7 @@ import torch
 from schnetpack import Properties
 from torch import nn
 from old import hyp_layers
-from old.hyperboloid import Hyperboloid
+from manifolds.hyperboloid import Hyperboloid
 
 
 class Encoder(nn.Module):
@@ -55,7 +55,13 @@ class Decoder(nn.Module):
         self.input_dim = args.dim
         self.output_dim = 1
         self.bias = args.bias
-        self.cls = nn.Linear(self.input_dim, self.output_dim, self.bias)
+        self.cls = nn.Sequential(
+            nn.Linear(self.input_dim, self.input_dim, self.bias),
+            nn.Linear(self.input_dim, self.input_dim, self.bias),
+            nn.Linear(self.input_dim, self.input_dim, self.bias),
+            nn.Linear(self.input_dim, self.output_dim, self.bias),
+        )
+
         self.decode_adj = False
 
     def decode(self, x, adj):
@@ -109,7 +115,7 @@ class RegModel(nn.Module):
             #     )
             # )
             hgc_layers.append(
-                hyp_layers.HNNLayer(  # 设置每一层的卷积操作 return h, adj
+                hyp_layers.HNNLayer(
                     self.manifold, in_dim, out_dim, self.c, args.dropout, act, args.bias
                 )
             )

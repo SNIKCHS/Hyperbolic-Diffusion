@@ -18,7 +18,7 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 10,
+        'lr_reduce_freq': 30,
         'gamma': 0.5,
         'print-epoch': True,
 

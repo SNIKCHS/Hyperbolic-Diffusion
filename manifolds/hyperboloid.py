@@ -39,7 +39,8 @@ class Hyperboloid():
         theta = torch.clamp(-prod / K, min=1.0 + self.eps[x.dtype])
         sqdist = K * arcosh(theta) ** 2
         # clamp distance to avoid nans in Fermi-Dirac decoder
-        return torch.clamp(sqdist, max=50.0)
+        # return torch.clamp(sqdist, max=50.0)
+        return sqdist
 
     def proj(self, x, c):
         """
