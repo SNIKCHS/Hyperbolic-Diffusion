@@ -1,7 +1,7 @@
 import torch
 from schnetpack import Properties
 from torch import nn
-from old import hyp_layers
+from layers import hyp_layers
 from manifolds.hyperboloid import Hyperboloid
 import torch.nn.functional as F
 
@@ -160,7 +160,6 @@ class RegModel(nn.Module):
         output = self.manifold.logmap0(output, self.c)
         output = self.manifold.proj_tan0(output, self.c)
 
-        # h = self.encoder((x,adj))
         return output
 
     def decode(self, h, adj):

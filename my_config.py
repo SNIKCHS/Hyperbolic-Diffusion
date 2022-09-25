@@ -46,7 +46,7 @@ config_args = {
         'alpha': 0.2, # 'alpha for leakyrelu in graph attention networks'),
         'double-precision': '0', # 'whether to use double precision'),
         'use_att': 1, # 'whether to use hyperbolic attention or not'),
-        'local_agg': 1, # 'whether to local tangent space aggregation or not'),
+        'local_agg': 0, # 'whether to local tangent space aggregation or not'),
 
         'dataset': 'cora', # 'which dataset to use'),
         'val-prop': 0.05, # 'proportion of validation edges for link prediction'),

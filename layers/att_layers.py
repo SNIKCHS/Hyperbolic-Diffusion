@@ -13,14 +13,32 @@ class DenseAtt(nn.Module):
         self.in_features = in_features
         self.sigmoid = nn.Sigmoid()
 
-    def forward (self, x, adj):
-        n = x.size(1)
-        # n x 1 x d
-        x_left = torch.unsqueeze(x, 2)
-        x_left = x_left.expand(-1,-1, n, -1)  # (b,n,n,d)
-        # 1 x n x d
-        x_right = torch.unsqueeze(x, 1)
-        x_right = x_right.expand(-1, n, -1, -1)  # (b,n,n,d)
+    def forward (self, x,x_tangent_self, adj):
+        """
+         # (b,n_atom,n_atom,n_embed) 所有原子在每个原子的切空间 和该原子的切空间
+        :param x:
+        :param adj:
+        :return:
+        """
+        # n = x.size(1)
+        # # n x 1 x d
+        # x_left = torch.unsqueeze(x, 2)
+        # x_left = x_left.expand(-1,-1, n, -1)  # (b,n,n,d)
+        # # 1 x n x d
+        # x_right = torch.unsqueeze(x, 1)
+        # x_right = x_right.expand(-1, n, -1, -1)  # (b,n,n,d)
+        #
+        # x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
+        # att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
+        # att_adj = self.sigmoid(att_adj)
+        # att_adj = torch.mul(adj, att_adj)
+
+        n = x.size(2)
+
+        x_left = x  # (b,n_atom,n_atom,n_embed)
+
+        x_right = x_tangent_self.unsqueeze(2) # (b,n_atom,n_embed)
+        x_right = x_right.expand(-1, -1, n, -1)  # (b,n,n,d)
 
         x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
         att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)

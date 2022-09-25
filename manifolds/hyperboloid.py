@@ -61,7 +61,13 @@ class Hyperboloid():
         return vals + mask * x   # mask * x = x1:d
 
     def proj_tan(self, u, x, c):
-
+        """
+        把u约束到X的切空间中
+        :param u:
+        :param x:
+        :param c:
+        :return:
+        """
         K = 1. / c
         d = x.size(-1) - 1
         ux = torch.sum(x.narrow(-1, 1, d) * u.narrow(-1, 1, d), dim=2, keepdim=True)

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn.modules.module import Module
 
-from old.att_layers import DenseAtt
+from layers.att_layers import DenseAtt
 
 
 def get_dim_act_curv(args):
@@ -67,7 +67,7 @@ class HyperbolicGraphConvolution(nn.Module):
 
         h = self.linear.forward(x)
         # print('linear',h)
-        h = self.agg.forward(h, adj)  # 聚合极大增加了数据大小
+        h = self.agg.forward(h, adj)
         # print('agg', h)
         h = self.hyp_act.forward(h)
         # print('hyp_act', h)
@@ -142,31 +142,52 @@ class HypAgg(Module):
         )
 
     def forward(self, x, adj):
-        x_tangent = self.manifold.logmap0(x, c=self.c)
+        # print('x:',torch.isnan(x).any())
+        x_tangent = self.manifold.logmap0(x, c=self.c) # (b,n_atom,n_embed)
+        # print('x_tangent:', torch.isnan(x_tangent).any())
         if self.use_att:
             if self.local_agg:
-                x_local_tangent = []
-                for i in range(x.size(1)):
-                    temp = self.manifold.logmap(x[:,i], x, c=self.c)  # 把所有原子投影到第i个原子的切空间  (b,n_atom,n_embed)
-                    x_local_tangent.append(temp)
+                # x_local_tangent = []
+                # # (b,n_atom,n_embed) expand (b,n_atom,1,n_embed)->(b,n_atom,n_atom,n_embed) 提供切空间
+                # # (b,n_atom,n_embed) expand (b,1,n_atom,n_embed)->(b,n_atom,n_atom,n_embed) 要映射的向量
+                # for i in range(x.size(1)):
+                #     temp = self.manifold.logmap(x[:,i], x, c=self.c)  # 把所有原子投影到第i个原子的切空间  (b,n_atom,n_embed)
+                #     x_local_tangent.append(temp)
+                #
+                # x_local_tangent = torch.stack(x_local_tangent, dim=1) # (b,n_atom,n_atom,n_embed)
+                b = x.size(0)
+                n = x.size(1)
+                dim = x.size(2)
+                x_provide = x.unsqueeze(2).expand(-1,-1,n,-1).reshape(b,-1,dim)
+                x_map = x.unsqueeze(1).expand(-1,n,-1,-1).reshape(b,-1,dim)
+                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b,n,n,dim) # (b,n_atom*n_atom,n_embed)
+                # print('x_local_tangent:', torch.isnan(x_local_tangent).any())
+                x_tangent_self = self.manifold.logmap(x,x, c=self.c) # (b,n_atom,n_embed)
+                adj_att = self.att(x_local_tangent,x_tangent_self, adj).unsqueeze(-1)  # (b,atom_num,atom_num,1)
 
-                x_local_tangent = torch.stack(x_local_tangent, dim=1) # (b,n_atom,n_atom,n_embed)
-                adj_att = self.att(x_tangent, adj)  # (b,atom_num,atom_num)
+                adj_att = adj_att.expand(-1,-1,-1,x_local_tangent.size()[3])
 
-                att_rep = adj_att.unsqueeze(-1) * x_local_tangent # (b,n_atom,n_atom,n_embed)
+                att_rep = adj_att * x_local_tangent # (b,n_atom,n_atom,n_embed)
+                # print('att_rep:', torch.isnan(att_rep).any())
                 # print('att_rep',att_rep)
                 support_t = torch.sum(att_rep, dim=2)# (b,n_atom,n_embed)
-
-                output = self.manifold.proj(self.manifold.expmap(support_t, x, c=self.c), c=self.c)
+                # print('support_t:', torch.isnan(support_t).any())
+                support_t = self.fusion(torch.concat([support_t,x_tangent_self],dim=2))
+                support_t = self.manifold.proj_tan(support_t,x,self.c)
+                # print('att_rep:', att_rep)
+                support_t = torch.clamp(support_t,min=-1e6,max=1e6)
+                output = self.manifold.proj(self.manifold.expmap(support_t, x, c=self.c), c=self.c)  #需要对每个support_t[:,i]从x[:,i]的切空间映射回流形
                 # print(output)
-
+                # print('output:', torch.isnan(output).any())
                 return output
             else:
-                adj_att = self.att(x_tangent, adj)
-                support_t = torch.matmul(adj_att, x_tangent)
+                adj_att = self.att(x_tangent, adj)  # (b,atom_num,atom_num)
+                support_t = torch.matmul(adj_att, x_tangent)+x_tangent
+                support_t = self.manifold.proj_tan0(support_t,self.c)
         else:
             support_t = torch.spmm(adj, x_tangent)
         output = self.manifold.proj(self.manifold.expmap0(support_t, c=self.c), c=self.c)
+        # print(output)
         return output
 
     def extra_repr(self):
