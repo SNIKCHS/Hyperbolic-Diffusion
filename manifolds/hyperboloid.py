@@ -34,6 +34,13 @@ class Hyperboloid():
         return torch.sqrt(torch.clamp(dot, min=self.eps[u.dtype]))
 
     def sqdist(self, x, y, c):
+        """
+        计算x和y的本征距离距离
+        :param x:
+        :param y:
+        :param c:
+        :return:
+        """
         K = 1. / c
         prod = self.minkowski_dot(x, y)
         theta = torch.clamp(-prod / K, min=1.0 + self.eps[x.dtype])
@@ -63,8 +70,8 @@ class Hyperboloid():
     def proj_tan(self, u, x, c):
         """
         把u约束到X的切空间中
-        :param u:
-        :param x:
+        :param u:需要投影的向量
+        :param x:提供切空间
         :param c:
         :return:
         """
@@ -174,6 +181,7 @@ class Hyperboloid():
 
     def mobius_add(self, x, y, c):
         """
+        x,y都位于流形上。把y先映射到o点切空间再平行传输到x的切空间再指数映射到流形
         x:被加数
         y:偏差
         """
@@ -182,12 +190,27 @@ class Hyperboloid():
         return self.expmap(v, x, c)
 
     def mobius_matvec(self, m, x, c):
+        """
+
+        :param m:
+        :param x: x在流形上
+        :param c:
+        :return:
+        """
         u = self.logmap0(x, c)
         mu = u @ m.transpose(-1, -2)
         return self.expmap0(mu, c)
 
-    # 把u从x的切空间平行传输到y的切空间
+
     def ptransp(self, x, y, u, c):
+        """
+        把u从x的切空间平行传输到y的切空间
+        :param x: from
+        :param y: to
+        :param u: vector
+        :param c:
+        :return:
+        """
         logxy = self.logmap(x, y, c)
         logyx = self.logmap(y, x, c)
         sqdist = torch.clamp(self.sqdist(x, y, c), min=self.min_norm)
@@ -195,10 +218,15 @@ class Hyperboloid():
         res = u - alpha * (logxy + logyx)
         return self.proj_tan(res, y, c)
 
-    """
-    把u从原点的切空间平行传输到x的切空间
-    """
+
     def ptransp0(self, x, u, c):
+        """
+        把u从原点的切空间平行传输到x的切空间
+        :param x: x在流形上
+        :param u:
+        :param c:
+        :return:
+        """
         K = 1. / c
         sqrtK = K ** 0.5
         x0 = x.narrow(-1, 0, 1)
