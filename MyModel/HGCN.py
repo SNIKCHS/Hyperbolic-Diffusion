@@ -144,6 +144,24 @@ class RegModel(nn.Module):
                 )
             )
         self.encoder = nn.Sequential(*hgc_layers)
+        # self.encoder = nn.Sequential(
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU(),
+        #     nn.Linear(args.dim, args.dim, args.bias),
+        #     nn.ReLU()
+        # )
         self.decoder = nn.Sequential(
             nn.Linear(args.dim, args.dim, args.bias),
             nn.Linear(args.dim, args.dim, args.bias),
@@ -151,6 +169,9 @@ class RegModel(nn.Module):
             nn.Linear(args.dim, 1, args.bias),
         )
 
+    def encode_euclid(self, x, adj):
+        output = self.encoder(x)  # 产生了NaN
+        return output
     def encode(self, x, adj):
 
         x_tan = self.manifold.proj_tan0(x, self.curvatures[0])  # 把x（欧式向量）投影到原点的切空间
