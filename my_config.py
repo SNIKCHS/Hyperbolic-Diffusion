@@ -7,7 +7,7 @@ config_args = {
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
-        'epochs': 300,
+        'epochs': 20,
         'weight_decay': 0.,
         'optimizer': 'Adam',
         'momentum': 0.999,
@@ -18,20 +18,24 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 20,
+        'lr_reduce_freq': 10,
         'gamma': 0.5,
         'print-epoch': True,
 
         'min-epochs': 100,
         'grad_clip':None,
 
+        'att_logit':'exp', #Specify logit for attention, can be any of [exp, sigmoid, tanh, ... from torch.<loigt>]
+
+        'decode_dim':23,
         'num_layers':8,
-        'feat_dim':11,  # 输入特征的维度 ，hyperbolid会自动+1
+        'num_dec_layers':8,
+        'feat_dim':14,  # 输入特征的维度 ，hyperbolid会自动+1
         'n_nodes': None,
-        'task': 'reg',
-        'model': 'HGCN',
-        'dim': 12,  # 隐层的dim
-        'n_atom_embed': 8, # 'atom embedding dimension'),
+        'task': 'rec',
+        'model': 'HNN',  # ['MLP','HNN','GCN','HGCAE'
+        'dim': 20,  # 隐层的dim
+        'n_atom_embed': 11, # 'atom embedding dimension'),
         'max_z': 100,   #'atom type'),
         'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
@@ -46,8 +50,9 @@ config_args = {
         'alpha': 0.2, # 'alpha for leakyrelu in graph attention networks'),
         'double-precision': '0', # 'whether to use double precision'),
         'use_att': 1, # 'whether to use hyperbolic attention or not'),
-        'local_agg': 0, # 'whether to local tangent space aggregation or not'),
-
+        'local_agg': 1, # 'whether to local tangent space aggregation or not'),
+        'att_type':'adjmask_dist',
+        'encdec_share_curvature':True,
         'dataset': 'cora', # 'which dataset to use'),
         'val-prop': 0.05, # 'proportion of validation edges for link prediction'),
         'test-prop': 0.1, # 'proportion of test edges for link prediction'),

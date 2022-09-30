@@ -4,6 +4,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# def get_att_logit(att_logit):
+#     if att_logit:
+#         att_logit = getattr(torch, att_logit)
+#     return att_logit
+# def HypAggAtt(in_features, manifold, dropout, act=None, att_type=None, att_logit=None, beta=0):
+#     att_logit = get_att_logit(att_logit, att_type)
+#     return GeometricAwareHypAggAtt(in_features, manifold, dropout, lambda x: x, att_logit=att_logit, beta=beta)
+
 
 class DenseAtt(nn.Module):
     def __init__(self, in_features, dropout):
@@ -13,37 +21,41 @@ class DenseAtt(nn.Module):
         self.in_features = in_features
         self.sigmoid = nn.Sigmoid()
 
-    def forward (self, x,x_tangent_self, adj):
+    def forward (self, x, x_tangent_self, adj):
         """
          # (b,n_atom,n_atom,n_embed) 所有原子在每个原子的切空间 和该原子的切空间
         :param x:
         :param adj:
         :return:
         """
-        # n = x.size(1)
-        # # n x 1 x d
-        # x_left = torch.unsqueeze(x, 2)
-        # x_left = x_left.expand(-1,-1, n, -1)  # (b,n,n,d)
-        # # 1 x n x d
-        # x_right = torch.unsqueeze(x, 1)
-        # x_right = x_right.expand(-1, n, -1, -1)  # (b,n,n,d)
-        #
-        # x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
-        # att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
-        # att_adj = self.sigmoid(att_adj)
-        # att_adj = torch.mul(adj, att_adj)
+        if x_tangent_self is None:
+            n = x.size(1)
+            # n x 1 x d
+            x_left = torch.unsqueeze(x, 2)
+            x_left = x_left.expand(-1,-1, n, -1)  # (b,n,n,d)
+            # 1 x n x d
+            x_right = torch.unsqueeze(x, 1)
+            x_right = x_right.expand(-1, n, -1, -1)  # (b,n,n,d)
 
-        n = x.size(2)
+            x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
+            att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
+            att_adj = self.sigmoid(att_adj)
+            att_adj = torch.mul(adj, att_adj)
+        else:
+            n = x.size(2)
+            x_left = x  # (b,n_atom,n_atom,n_embed)
+            x_right = x_tangent_self.unsqueeze(2) # (b,n_atom,n_embed)
+            x_right = x_right.expand(-1, -1, n, -1)  # (b,n,n,d)
 
-        x_left = x  # (b,n_atom,n_atom,n_embed)
+            x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
+            att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
+            att_adj = torch.mul(adj, att_adj)
+            neg_inf = torch.ones_like(att_adj) * -1e10
+            att_adj = torch.where(att_adj == 0, neg_inf, att_adj)
+            att_adj = F.softmax(att_adj,dim=2)
 
-        x_right = x_tangent_self.unsqueeze(2) # (b,n_atom,n_embed)
-        x_right = x_right.expand(-1, -1, n, -1)  # (b,n,n,d)
 
-        x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
-        att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
-        att_adj = self.sigmoid(att_adj)
-        att_adj = torch.mul(adj, att_adj)
+
         return att_adj
 
 
