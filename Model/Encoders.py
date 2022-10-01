@@ -12,15 +12,29 @@ class Encoder(nn.Module):
     Encoder abstract class.
     """
 
-    def __init__(self):
+    def __init__(self,args):
         super(Encoder, self).__init__()
+        if args.manifold == 'Hyperboloid':
+            n_atom_embed = args.feat_dim-4
+        else:
+            n_atom_embed = args.feat_dim - 3
+        self.embedding = nn.Embedding(args.max_z, n_atom_embed, padding_idx=0)
 
-    def encode(self, x, adj):
+    def forward(self,pos,h,adj):
+        h = self.embedding(h)  # (b,n_atom,n_atom_embed)
+        h = torch.concat([pos, h], dim=2)  # (b,n_atom,n_atom_embed+3)
+        if self.manifold.name == 'Hyperboloid':
+            o = torch.zeros_like(h)
+            h = torch.cat([o[:, :, 0:1], h], dim=2)  # (b,n_atom,feat_dim)
+        return self.encode(h,adj)
+
+
+    def encode(self, h, adj):
         if self.encode_graph:
-            input = (x, adj)
+            input = (h, adj)
             output , _ = self.layers(input)
         else:
-            output = self.layers(x)
+            output = self.layers(h)
         return output
 
 class MLP(Encoder):
@@ -28,8 +42,8 @@ class MLP(Encoder):
     Multi-layer perceptron.
     """
 
-    def __init__(self, c, args):
-        super(MLP, self).__init__(c)
+    def __init__(self, args):
+        super(MLP, self).__init__(args)
         assert args.num_layers > 0
         dims, acts = get_dim_act(args)
         layers = []
@@ -46,7 +60,7 @@ class HNN(Encoder):
     """
 
     def __init__(self, args):
-        super(HNN, self).__init__()
+        super(HNN, self).__init__(args)
 
         self.manifold = getattr(manifolds, args.manifold)()
         assert args.num_layers > 1
@@ -76,7 +90,7 @@ class GCN(Encoder):
     """
 
     def __init__(self, args):
-        super(GCN, self).__init__()
+        super(GCN, self).__init__(args)
         assert args.num_layers > 0
         dims, acts = get_dim_act(args)
         gc_layers = []
@@ -93,7 +107,7 @@ class HGCAE(Encoder):
     """
 
     def __init__(self, args): #, use_cnn
-        super(HGCAE, self).__init__()
+        super(HGCAE, self).__init__(args)
         self.manifold = getattr(manifolds, args.manifold)()
         assert args.num_layers > 0
         dims, acts, self.curvatures = get_dim_act_curv(args)

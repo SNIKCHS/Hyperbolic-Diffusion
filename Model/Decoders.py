@@ -13,7 +13,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.c = c
 
-        self.out = Linear(args.feat_dim,args.decode_dim,None,None,True)
+        self.out = Linear(args.feat_dim,args.max_z+3,None,None,True)
 
     def decode(self, x, adj):
         '''

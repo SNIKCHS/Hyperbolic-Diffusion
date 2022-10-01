@@ -24,10 +24,8 @@ config_args = {
 
         'min-epochs': 100,
         'grad_clip':None,
-
         'att_logit':'exp', #Specify logit for attention, can be any of [exp, sigmoid, tanh, ... from torch.<loigt>]
 
-        'decode_dim':23,
         'num_layers':8,
         'num_dec_layers':8,
         'feat_dim':14,  # 输入特征的维度 ，hyperbolid会自动+1
@@ -35,8 +33,8 @@ config_args = {
         'task': 'rec',
         'model': 'HNN',  # ['MLP','HNN','GCN','HGCAE'
         'dim': 20,  # 隐层的dim
-        'n_atom_embed': 11, # 'atom embedding dimension'),
-        'max_z': 100,   #'atom type'),
+
+        'max_z': 20,   #'atom type'),
         'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
         'r': 2.,  # 'fermi-dirac decoder parameter for lp'),
@@ -45,7 +43,7 @@ config_args = {
         'pos-weight': 0, # 'whether to upweight positive class in node classification tasks'),
         'num-layers': 2, # 'number of hidden layers in encoder'),
         'bias': 0, # 'whether to use bias (1) or not (0)'),
-        'act': 'relu', # 'which activation function to use (or None for no activation)'),
+        'act': 'relu', # 'which activation function to use (or None for no activation)'), silu
         'n-heads': 4, # 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': 0.2, # 'alpha for leakyrelu in graph attention networks'),
         'double-precision': '0', # 'whether to use double precision'),
