@@ -3,11 +3,11 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 1e-4,  # learning rate 1e-2
+        'lr': 1e-3,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
-        'epochs': 300,
+        'epochs': 10000,
         'weight_decay': 0.,
         'optimizer': 'Adam',
         'momentum': 0.999,

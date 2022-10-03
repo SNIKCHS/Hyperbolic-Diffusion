@@ -199,7 +199,32 @@ class PredefinedNoiseSchedule(torch.nn.Module):
         return self.gamma[t_int]
 
 
+class ResBlock(nn.Module):
+    def __init__(self, attn=False):
+        super().__init__()
+        self.block1 = nn.Sequential(
+            # nn.LazyBatchNorm1d(),
+            nn.Linear(400, 400),
+            nn.SiLU(),
+        )
+        self.block2 = nn.Sequential(
+            # nn.LazyBatchNorm1d(),
+            nn.Linear(400, 400),
+            nn.SiLU(),
+        )
+        if attn:
+            # self.attn = AttnBlock(out_ch)
+            pass
+        else:
+            self.attn = nn.Identity()
 
+
+    def forward(self, x):
+        h = self.block1(x)
+        h = self.block2(h)
+        h = h + x
+        h = self.attn(h)
+        return h
 class DenoiseNet(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -208,19 +233,22 @@ class DenoiseNet(nn.Module):
         # self.net = getattr(Encoders, args.diff_model)(args)
         self.net = nn.Sequential(
             nn.Linear(args.dim, 400),
-            nn.SiLU(),
+            ResBlock(),
+            ResBlock(),
+            ResBlock(),
+            ResBlock(),
             nn.Linear(400, 400),
             nn.SiLU(),
             nn.Linear(400, 400),
             nn.SiLU(),
             nn.Linear(400, args.dim),
         )
+
         self.out = Linear(args.dim, args.dim - 1, None, None, True)
 
     def forward(self, t, z_t, adj):
-        b,n_atom,dim = z_t.size()
-        h_time = t.repeat(1, n_atom).unsqueeze(2)
-        z_t = torch.cat([z_t, h_time], dim=2)
+        t = t.repeat(1,z_t.size(1)).unsqueeze(2)
+        z_t = torch.cat([t, z_t], dim=2)
         noise = self.net(z_t)
 
         return self.out(noise)
@@ -230,7 +258,6 @@ class HyperbolicDiffusion(nn.Module):
 
     def __init__(self, args, encoder, decoder,T = 1000,beta_1=1e-4, beta_T=0.02, timesteps: int = 1000,loss_type='l2', noise_schedule='cosine', noise_precision=1e-4):
         super(HyperbolicDiffusion, self).__init__()
-        self.loss_type = loss_type
         self.manifold = Hyperboloid()  # 选择相应的流形
         self.dim = args.dim
         self.n_dims = args.dim
@@ -261,7 +288,6 @@ class HyperbolicDiffusion(nn.Module):
 
 
         h = self.encoder(positions,atomic_numbers, adj)
-        # print(h[0])
         loss = self.compute_loss(h, atom_mask.unsqueeze(2), t0_always=True, adj=adj)
         return loss
 
@@ -274,7 +300,7 @@ class HyperbolicDiffusion(nn.Module):
         x_t = (
                 extract(self.sqrt_alphas_bar, t, h.shape) * h +
                 extract(self.sqrt_one_minus_alphas_bar, t, h.shape) * noise)
-        pred_noise = self.denoise_net(t.unsqueeze(1),x_t,adj)
+        pred_noise = self.denoise_net(t.view(h.shape[0],1),x_t,adj)
         loss = F.mse_loss(pred_noise, noise, reduction='mean')
 
         return loss
