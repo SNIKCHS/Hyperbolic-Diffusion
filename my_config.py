@@ -3,11 +3,11 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 0.01,  # learning rate
+        'lr': 1e-4,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
-        'epochs': 20,
+        'epochs': 300,
         'weight_decay': 0.,
         'optimizer': 'Adam',
         'momentum': 0.999,
@@ -18,24 +18,23 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 10,
-        'gamma': 0.5,
+        'lr_reduce_freq': 2000, #20
+        'gamma': 0.9, # 0.5
         'print-epoch': True,
 
         'min-epochs': 100,
         'grad_clip':None,
         'att_logit':'exp', #Specify logit for attention, can be any of [exp, sigmoid, tanh, ... from torch.<loigt>]
 
-        'num_layers':8,
-        'num_dec_layers':8,
-        'feat_dim':14,  # 输入特征的维度 ，hyperbolid会自动+1
+        'num_layers':4,
         'n_nodes': None,
         'task': 'rec',
-        'model': 'HNN',  # ['MLP','HNN','GCN','HGCAE'
+        'model': 'MLP',  # ['MLP','HNN','GCN','HGCAE'
+        'diff_model':'MLP',
         'dim': 20,  # 隐层的dim
 
         'max_z': 20,   #'atom type'),
-        'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
+        'manifold': 'Euclidean',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
         'r': 2.,  # 'fermi-dirac decoder parameter for lp'),
         't': 1., # 'fermi-dirac decoder parameter for lp'),

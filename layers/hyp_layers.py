@@ -21,7 +21,7 @@ def get_dim_act_curv(args):
     else:
         act = getattr(F, args.act)
     acts = [act] * (args.num_layers)  # len=args.num_layers
-    dims = [args.feat_dim] + ([args.dim] * (args.num_layers))  # len=args.num_layers+1
+    dims = [args.dim] * (args.num_layers+1)  # len=args.num_layers+1
     n_curvatures = args.num_layers  # len=args.num_layers 出去后会+1
 
     if args.c is None:

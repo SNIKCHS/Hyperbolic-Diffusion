@@ -20,7 +20,7 @@ def get_dim_act(args):
         act = getattr(F, args.act)
     acts = [act] * (args.num_layers)
 
-    dims = [args.feat_dim] + ([args.dim] * (args.num_layers))
+    dims = [args.dim] * (args.num_layers+1)
 
     return dims, acts
 

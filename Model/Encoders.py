@@ -1,10 +1,7 @@
 import torch
-from schnetpack import Properties
 from torch import nn
 from layers.hyp_layers import get_dim_act_curv,HNNLayer,HyperbolicGraphConvolution
 from layers.layers import get_dim_act,GraphConvolution, Linear
-from manifolds.hyperboloid import Hyperboloid
-import torch.nn.functional as F
 import manifolds
 
 class Encoder(nn.Module):
@@ -15,9 +12,9 @@ class Encoder(nn.Module):
     def __init__(self,args):
         super(Encoder, self).__init__()
         if args.manifold == 'Hyperboloid':
-            n_atom_embed = args.feat_dim-4
+            n_atom_embed = args.dim-4
         else:
-            n_atom_embed = args.feat_dim - 3
+            n_atom_embed = args.dim-3
         self.embedding = nn.Embedding(args.max_z, n_atom_embed, padding_idx=0)
 
     def forward(self,pos,h,adj):
@@ -45,9 +42,10 @@ class MLP(Encoder):
     def __init__(self, args):
         super(MLP, self).__init__(args)
         assert args.num_layers > 0
+        self.manifold = getattr(manifolds, args.manifold)()
         dims, acts = get_dim_act(args)
         layers = []
-        for i in range(len(dims) - 1):
+        for i in range(args.num_layers):
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
             layers.append(Linear(in_dim, out_dim, args.dropout, act, args.bias))
@@ -67,7 +65,7 @@ class HNN(Encoder):
         dims, acts, self.curvatures = get_dim_act_curv(args)
         self.curvatures.append(nn.Parameter(torch.Tensor([1]).to(args.device)))
         hnn_layers = []
-        for i in range(len(dims) - 1):
+        for i in range(args.num_layers):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
@@ -94,7 +92,7 @@ class GCN(Encoder):
         assert args.num_layers > 0
         dims, acts = get_dim_act(args)
         gc_layers = []
-        for i in range(len(dims) - 1):
+        for i in range(args.num_layers):
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
             gc_layers.append(GraphConvolution(in_dim, out_dim, args.dropout, act, args.bias))
@@ -116,7 +114,7 @@ class HGCAE(Encoder):
         else:
             self.curvatures.append(torch.tensor([args.c]).to(args.device))
         hgc_layers = []
-        for i in range(len(dims) - 1):
+        for i in range(args.num_layers):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
             in_dim, out_dim = dims[i], dims[i + 1]
             act = acts[i]
