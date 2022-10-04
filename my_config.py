@@ -3,11 +3,11 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 1e-4,  # learning rate 1e-2
+        'lr': 1e-3,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
-        'epochs': 10000,
+        'epochs': 200,
         'weight_decay': 0.,
         'optimizer': 'Adam',
         'momentum': 0.999,
@@ -29,8 +29,8 @@ config_args = {
         'num_layers':4,
         'n_nodes': None,
         'task': 'rec',
-        'model': 'MLP',  # ['MLP','HNN','GCN','HGCAE'
-        'diff_model':'MLP',
+        'model': 'HGCAE',  # ['MLP','HNN','GCN','HGCAE'
+        'diff_model':'HGCAE',
         'dim': 20,  # 隐层的dim
 
         'max_z': 20,   #'atom type'),

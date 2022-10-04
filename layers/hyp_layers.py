@@ -74,6 +74,8 @@ class HyperbolicGraphConvolution(nn.Module):
 class HypLinear(nn.Module):
     """
     Hyperbolic linear layer.
+    input in manifold
+    output in manifold
     """
 
     def __init__(self, manifold, in_features, out_features, c, dropout, use_bias):
@@ -118,7 +120,7 @@ class HypAgg(Module):
     Hyperbolic aggregation layer.
     """
 
-    def __init__(self, manifold, c, use_att, in_features, dropout, att_type='sparse_adjmask_dist', att_logit=None, decode=False,local_agg = True):
+    def __init__(self, manifold, c, use_att, in_features, dropout, att_type='adjmask_dist', att_logit=None, decode=False,local_agg = True):
         super(HypAgg, self).__init__()
         self.manifold = manifold
         self.c = c
@@ -128,27 +130,22 @@ class HypAgg(Module):
         self.local_agg = local_agg
         if self.use_att:
             self.att = DenseAtt(in_features, dropout)
-            self.att_type = att_type
-            self.special_spmm = SpecialSpmm()
 
-        self.decode = decode
 
     def forward(self, x, adj):
         x_tangent = self.manifold.logmap0(x, c=self.c)  # (b,n_atom,n_embed)
         if self.use_att:
             if self.local_agg:
-
                 b = x.size(0)
                 n = x.size(1)
                 dim = x.size(2)
                 x_provide = x.unsqueeze(2).expand(-1, -1, n, -1).reshape(b, -1, dim)# (b,n_atom,n_embed) expand (b,n_atom,1,n_embed)->(b,n_atom*n_atom,n_embed) 提供切空间
                 x_map = x.unsqueeze(1).expand(-1, n, -1, -1).reshape(b, -1, dim)# (b,n_atom,n_embed) expand (b,1,n_atom,n_embed)->(b,n_atom*n_atom,n_embed) 要映射的向量
-                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)  # (b,n_atom,n_atom,n_embed)
+                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)  # (b,n_atom,n_atom,n_embed) 第二个维度所有原子在第一个维度原子的切空间
                 # print('x_local_tangent:', torch.isnan(x_local_tangent).any())
                 x_tangent_self = self.manifold.logmap(x, x, c=self.c)  # (b,n_atom,n_embed)
                 adj_att = self.att(x_local_tangent, x_tangent_self, adj).unsqueeze(-1)  # (b,atom_num,atom_num,1)
 
-                adj_att = adj_att.expand(-1, -1, -1, x_local_tangent.size()[3])
                 att_rep = adj_att * x_local_tangent  # (b,n_atom,n_atom,n_embed)
                 support_t = torch.sum(att_rep, dim=2)  # (b,n_atom,n_embed)
                 support_t = self.manifold.proj_tan(support_t, x, self.c)
@@ -163,8 +160,7 @@ class HypAgg(Module):
                 output = self.manifold.proj(self.manifold.expmap0(support_t, c=self.c), c=self.c)
                 # print(output)
         else:
-            x_tangent = self.manifold.logmap0(x, c=self.c)
-            support_t = torch.spmm(adj, x_tangent)
+            support_t = torch.bmm(adj, x_tangent) # (b,n_atom,n_atom) (b,n_atom,n_embed)
             output = self.manifold.proj(self.manifold.expmap0(support_t, c=self.c), c=self.c)
 
         return output
@@ -176,6 +172,8 @@ class HypAgg(Module):
 class HypAct(Module):
     """
     Hyperbolic activation layer.
+    input in manifold
+    output in manifold
     """
 
     def __init__(self, manifold, c_in, c_out, act):

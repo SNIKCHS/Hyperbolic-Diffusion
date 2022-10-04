@@ -54,7 +54,7 @@ class HyperbolicAE(nn.Module):
         :return: loss
         """
         atomic_numbers, positions = x
-        positions_pred,atomic_numbers_pred  = x_hat[...,:3],x_hat[...,3:]
+        positions_pred,atomic_numbers_pred = x_hat[...,:3],x_hat[...,3:]
         n_type = atomic_numbers_pred.size(-1)
 
         atom_loss_f = nn.CrossEntropyLoss(reduction='sum')

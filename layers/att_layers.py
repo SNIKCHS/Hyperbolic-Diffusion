@@ -39,8 +39,12 @@ class DenseAtt(nn.Module):
 
             x_cat = torch.concat((x_left, x_right), dim=3)  # (b,n,n,2*d)
             att_adj = self.linear(x_cat).squeeze()  # (b,atom_num,atom_num)
-            att_adj = self.sigmoid(att_adj)
+            # att_adj = self.sigmoid(att_adj)
+            # att_adj = torch.mul(adj, att_adj)
             att_adj = torch.mul(adj, att_adj)
+            neg_inf = torch.ones_like(att_adj) * -1e10
+            att_adj = torch.where(att_adj == 0, neg_inf, att_adj)
+            att_adj = F.softmax(att_adj, dim=2)
         else:
             n = x.size(2)
             x_left = x  # (b,n_atom,n_atom,n_embed)
@@ -52,8 +56,10 @@ class DenseAtt(nn.Module):
             att_adj = torch.mul(adj, att_adj)
             neg_inf = torch.ones_like(att_adj) * -1e10
             att_adj = torch.where(att_adj == 0, neg_inf, att_adj)
+            # print('bef:',att_adj[0,0])
             att_adj = F.softmax(att_adj,dim=2)
-
+            att_adj = torch.mul(adj, att_adj)
+            # print('aft:',att_adj[0,0])
 
 
         return att_adj
