@@ -63,7 +63,11 @@ class HNN(Encoder):
         self.manifold = getattr(manifolds, args.manifold)()
         assert args.num_layers > 1
         dims, acts, self.curvatures = get_dim_act_curv(args)
-        self.curvatures.append(nn.Parameter(torch.Tensor([1]).to(args.device)))
+
+        # if args.c is None:
+        #     self.curvatures.append(nn.Parameter(torch.Tensor([1]).to(args.device)))
+        # else:
+        #     self.curvatures.append(torch.tensor([args.c]).to(args.device))
         hnn_layers = []
         for i in range(args.num_layers):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
@@ -109,10 +113,10 @@ class HGCAE(Encoder):
         self.manifold = getattr(manifolds, args.manifold)()
         assert args.num_layers > 0
         dims, acts, self.curvatures = get_dim_act_curv(args)
-        if args.c is None:
-            self.curvatures.append(nn.Parameter(torch.Tensor([1]).to(args.device)))
-        else:
-            self.curvatures.append(torch.tensor([args.c]).to(args.device))
+        # if args.c is None:
+        #     self.curvatures.append(nn.Parameter(torch.Tensor([1]).to(args.device)))
+        # else:
+        #     self.curvatures.append(torch.tensor([args.c]).to(args.device))
         hgc_layers = []
         for i in range(args.num_layers):
             c_in, c_out = self.curvatures[i], self.curvatures[i + 1]

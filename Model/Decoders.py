@@ -16,11 +16,7 @@ class Decoder(nn.Module):
         self.out = Linear(args.dim,args.max_z+3,None,None,True)
 
     def decode(self, x, adj):
-        '''
-        output
-        - nc : probs
-        - rec : input_feat
-        '''
+
         if self.decode_adj:
             input = (x, adj)
             output, _ = self.decoder.forward(input)
@@ -47,9 +43,9 @@ class GCNDecoder(Decoder):
 
         assert args.num_layers > 0
         dims, acts = get_dim_act(args)
-        dims = dims[::-1]
+        # dims = dims[::-1]
         # acts = acts[::-1]
-        acts = acts[::-1][:-1] + [lambda x: x]  # Last layer without act
+        # acts = acts[::-1][:-1] + [lambda x: x]  # Last layer without act
         gc_layers = []
         for i in range(args.num_layers):
             in_dim, out_dim = dims[i], dims[i + 1]
@@ -99,22 +95,12 @@ class HGCAEDecoder(Decoder):
 
         assert args.num_layers > 0
 
-        dims, acts, _ = hyp_layers.get_dim_act_curv(args)
-        dims = dims[::-1] # 倒序
-        acts = acts[::-1][:-1] + [lambda x: x]  # Last layer without act
-        self.curvatures = self.c[::-1]
-
-        if not args.encdec_share_curvature:  # do not share and enc-dec mirror-shape
-            num_c = len(self.curvatures)
-            self.curvatures = self.curvatures[:1]
-            if args.c is None:
-                self.curvatures += [nn.Parameter(torch.Tensor([1]).to(args.device))] * (num_c - 1)
-            else:
-                self.curvatures += [torch.tensor([args.c])] * (num_c - 1)
-                if not args.cuda == -1:
-                    self.curvatures = [curv.to(args.device) for curv in self.curvatures]
-
-        # self.curvatures = self.curvatures[:-1] + [None]
+        dims, acts, self.curvatures = hyp_layers.get_dim_act_curv(args)
+        # dims = dims[::-1] # 倒序
+        # acts = acts[::-1][:-1] + [lambda x: x]  # Last layer without act
+        self.curvatures[0] = c[-1]
+        if args.encdec_share_curvature:
+            self.curvatures = c[::-1]
 
         hgc_layers = []
         for i in range(args.num_layers):
@@ -147,21 +133,12 @@ class HNNDecoder(Decoder):
 
         assert args.num_layers > 0
 
-        dims, acts, _ = hyp_layers.get_dim_act_curv(args)
-        dims = dims[::-1]
-        acts = acts[::-1][:-1] + [lambda x: x]  # Last layer without act
-
-        self.curvatures = c[::-1]
-
-        if not args.encdec_share_curvature:  # do not share and enc-dec mirror-shape
-            num_c = len(self.curvatures)
-            self.curvatures = self.curvatures[:1]
-            if args.c is None:
-                self.curvatures += [nn.Parameter(torch.Tensor([1]).to(args.device))] * (num_c - 1)
-            else:
-                self.curvatures += [torch.tensor([args.c])] * (num_c - 1)
-                if not args.cuda == -1:
-                    self.curvatures = [curv.to(args.device) for curv in self.curvatures]
+        dims, acts, self.curvatures = hyp_layers.get_dim_act_curv(args)
+        # dims = dims[::-1]
+        # acts = acts[::-1]
+        self.curvatures[0] = c[-1]  # encoder的最后一个curvature是decoder的第一个curvature
+        if args.encdec_share_curvature:
+            self.curvatures = c[::-1]
 
         hnn_layers = []
 
@@ -180,7 +157,11 @@ class HNNDecoder(Decoder):
         self.decode_adj = False
 
     def decode(self, x, adj):
-        output = super(HNNDecoder, self).decode(x, adj)
+        x_hyp = self.manifold.proj(
+            self.manifold.expmap0(self.manifold.proj_tan0(x, self.curvatures[0]), c=self.curvatures[0]),
+            c=self.curvatures[0])
+        output = super(HNNDecoder, self).decode(x_hyp, adj)
+
         return output
 
 

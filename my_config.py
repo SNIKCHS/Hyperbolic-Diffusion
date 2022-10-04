@@ -3,7 +3,7 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 1e-3,  # learning rate 1e-2
+        'lr': 1e-4,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
@@ -18,8 +18,8 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 2000, #20
-        'gamma': 0.9, # 0.5
+        'lr_reduce_freq': 10, #20
+        'gamma': 0.8, # 0.5
         'print-epoch': True,
 
         'min-epochs': 100,
@@ -34,7 +34,7 @@ config_args = {
         'dim': 20,  # 隐层的dim
 
         'max_z': 20,   #'atom type'),
-        'manifold': 'Euclidean',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
+        'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
         'r': 2.,  # 'fermi-dirac decoder parameter for lp'),
         't': 1., # 'fermi-dirac decoder parameter for lp'),
@@ -49,7 +49,7 @@ config_args = {
         'use_att': 1, # 'whether to use hyperbolic attention or not'),
         'local_agg': 1, # 'whether to local tangent space aggregation or not'),
         'att_type':'adjmask_dist',
-        'encdec_share_curvature':True,
+        'encdec_share_curvature':False,
         'dataset': 'cora', # 'which dataset to use'),
         'val-prop': 0.05, # 'proportion of validation edges for link prediction'),
         'test-prop': 0.1, # 'proportion of test edges for link prediction'),
