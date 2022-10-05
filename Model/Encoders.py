@@ -3,6 +3,7 @@ from torch import nn
 from layers.hyp_layers import get_dim_act_curv,HNNLayer,HyperbolicGraphConvolution
 from layers.layers import get_dim_act,GraphConvolution, Linear
 import manifolds
+import torch.nn.functional as F
 
 class Encoder(nn.Module):
     """
@@ -94,6 +95,7 @@ class GCN(Encoder):
     def __init__(self, args):
         super(GCN, self).__init__(args)
         assert args.num_layers > 0
+        self.manifold = getattr(manifolds, args.manifold)()
         dims, acts = get_dim_act(args)
         gc_layers = []
         for i in range(args.num_layers):
@@ -103,13 +105,13 @@ class GCN(Encoder):
         self.layers = nn.Sequential(*gc_layers)
         self.encode_graph = True
 
-class HGCAE(Encoder):
+class HGCN(Encoder):
     """
     Hyperbolic Graph Convolutional Auto-Encoders.
     """
 
     def __init__(self, args): #, use_cnn
-        super(HGCAE, self).__init__(args)
+        super(HGCN, self).__init__(args)
         self.manifold = getattr(manifolds, args.manifold)()
         assert args.num_layers > 0
         dims, acts, self.curvatures = get_dim_act_curv(args)
@@ -135,7 +137,7 @@ class HGCAE(Encoder):
         x_hyp = self.manifold.proj(
                 self.manifold.expmap0(self.manifold.proj_tan0(x, self.curvatures[0]), c=self.curvatures[0]),
                 c=self.curvatures[0])
-        output = super(HGCAE, self).encode(x_hyp, adj)
+        output = super(HGCN, self).encode(x_hyp, adj)
         output = self.manifold.logmap0(output, self.curvatures[-1])
         output = self.manifold.proj_tan0(output, self.curvatures[-1])
         return output

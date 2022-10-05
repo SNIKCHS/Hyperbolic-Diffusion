@@ -83,13 +83,13 @@ class LinearDecoder(Decoder):
 
 import layers.hyp_layers as hyp_layers
 
-class HGCAEDecoder(Decoder):
+class HGCNDecoder(Decoder):
     """
     Decoder for HGCAE
     """
 
     def __init__(self, c, args):
-        super(HGCAEDecoder, self).__init__(c,args)
+        super(HGCNDecoder, self).__init__(c,args)
         self.manifold = getattr(manifolds, args.manifold)()
 
 
@@ -118,7 +118,7 @@ class HGCAEDecoder(Decoder):
         self.decode_adj = True
 
     def decode(self, x, adj):
-        output = super(HGCAEDecoder, self).decode(x, adj)
+        output = super(HGCNDecoder, self).decode(x, adj)
         return output
 
 
@@ -168,7 +168,7 @@ class HNNDecoder(Decoder):
 model2decoder = {
     'GCN': GCNDecoder,
     'HNN': HNNDecoder,
-    'HGCAE': HGCAEDecoder,
+    'HGCN': HGCNDecoder,
     'MLP': LinearDecoder,
 }
 

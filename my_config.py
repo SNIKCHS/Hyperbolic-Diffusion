@@ -3,7 +3,7 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 1e-3,  # learning rate 1e-2
+        'lr': 1e-2,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
@@ -18,19 +18,19 @@ config_args = {
         'save': 0,
         'save-dir': None,
         'sweep-c': 0,
-        'lr_reduce_freq': 10, #20
-        'gamma': 0.8, # 0.5
+        'lr_reduce_freq': 2000, #20
+        'gamma': 0.9, # 0.5
         'print-epoch': True,
 
         'min-epochs': 100,
-        'grad_clip':None,
+        'grad_clip':10,
         'att_logit':'exp', #Specify logit for attention, can be any of [exp, sigmoid, tanh, ... from torch.<loigt>]
 
         'num_layers':4,
         'n_nodes': None,
         'task': 'rec',
-        'model': 'HGCAE',  # ['MLP','HNN','GCN','HGCAE'
-        'diff_model':'HGCAE',
+        'model': 'HGCN',  # ['MLP','HNN','GCN','HGCN'
+        'diff_model':'HGCN',
         'dim': 20,  # 隐层的dim
 
         'max_z': 20,   #'atom type'),

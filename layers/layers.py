@@ -25,10 +25,9 @@ def get_dim_act(args):
     return dims, acts
 
 
-from layers.att_layers import SpecialSpmm
 class GraphConvolution(Module):
     """
-    Simple GCN layer.
+    Simple GCN layer
     """
 
     def __init__(self, in_features, out_features, dropout, act, use_bias):
@@ -38,19 +37,12 @@ class GraphConvolution(Module):
         self.act = act
         self.in_features = in_features
         self.out_features = out_features
-        self.special_spmm = SpecialSpmm()
 
     def forward(self, input):
         x, adj = input
         hidden = self.linear.forward(x)
         hidden = F.dropout(hidden, self.dropout, training=self.training)
-        if adj.is_sparse:
-            edge = adj._indices()
-            edge_e = adj._values()
-            N = input[0].shape[0]
-            support = self.special_spmm(edge, edge_e, torch.Size([N,N]), hidden)
-        else:
-            support = torch.mm(adj, hidden)
+        support = torch.bmm(adj[1], hidden)
         output = self.act(support), adj
         return output
 

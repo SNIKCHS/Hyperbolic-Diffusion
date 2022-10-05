@@ -1,5 +1,8 @@
 import numpy as np
+from schnetpack.nn import MollifierCutoff, HardCutoff
 import torch
+from schnetpack.nn import AtomDistances
+
 import Model.Decoders as Decoders
 import Model.Encoders as Encoders
 from schnetpack import Properties
@@ -23,6 +26,8 @@ class HyperbolicAE(nn.Module):
         c = self.encoder.curvatures if hasattr(self.encoder, 'curvatures') else args.c
         self.decoder = Decoders.model2decoder[args.model](c, args)
         self.args = args
+        self.distances = AtomDistances()
+        self.cutoff = HardCutoff()
 
     def forward(self, inputs):
         atomic_numbers = inputs[Properties.Z]  # (b,n_atom)
@@ -30,19 +35,26 @@ class HyperbolicAE(nn.Module):
         positions -= positions.mean(dim=1, keepdim=True)
         atom_mask = inputs[Properties.atom_mask]  # (b,n_atom)
 
-        size = atom_mask.size()
-        adj = atom_mask.unsqueeze(2).expand(size[0], size[1], size[1])  # (b,n_atom,n_atom)
-        adj = adj * adj.permute(0, 2, 1)  # (b,n_atom,n_atom)
-        # n = atom_mask.sum(1).view(-1, 1, 1).expand(-1, size[1], size[1])
-        # adj = adj / n  # (b,n_atom,n_atom) atom_mask like ,归一化
 
-        h = self.encoder(positions, atomic_numbers, adj)
+        size = atom_mask.size()
+        mask = atom_mask.unsqueeze(2).expand(size[0], size[1], size[1])  # (b,n_atom,n_atom)
+        mask = mask * mask.permute(0, 2, 1)  # (b,n_atom,n_atom) mask
+        # n = atom_mask.sum(1).view(-1, 1, 1).expand(-1, size[1], size[1])
+        # mask = mask / n  # (b,n_atom,n_atom) atom_mask like ,归一化
+
+        ar = torch.arange(atomic_numbers.size(1), device=atomic_numbers.device)[None, None, :].repeat(atomic_numbers.size(0),atomic_numbers.size(1),1)  # (b,n_atom,n_atom)
+        nbh = ar * mask  # 邻接关系 存index
+
+        dist = self.distances(positions,nbh.long(),neighbor_mask=mask.bool())  #(b,n_atom,n_atom)
+        mask = self.cutoff(dist) * mask
+
+        h = self.encoder(positions, atomic_numbers, (dist,mask))
 
         mu = torch.mean(h,dim=-1)
         logvar = torch.log(torch.std(h,dim=-1))
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp().pow(2))/ positions.size(0)
         KLD = 0.01*torch.clamp(KLD,min=0,max=1e2)
-        output = self.decoder.decode(h, adj)
+        output = self.decoder.decode(h, (dist,mask))
         target = (atomic_numbers, positions.float())
         return self.compute_loss(target, output),KLD
 
@@ -55,6 +67,7 @@ class HyperbolicAE(nn.Module):
         """
         atomic_numbers, positions = x
         positions_pred,atomic_numbers_pred = x_hat[...,:3],x_hat[...,3:]
+        # positions_pred = self.manifold.logmap0(positions_pred,self.decoder.curvatures[-1])
         n_type = atomic_numbers_pred.size(-1)
 
         atom_loss_f = nn.CrossEntropyLoss(reduction='sum')

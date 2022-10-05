@@ -139,28 +139,31 @@ class HypAgg(Module):
                 b = x.size(0)
                 n = x.size(1)
                 dim = x.size(2)
-                x_provide = x.unsqueeze(2).expand(-1, -1, n, -1).reshape(b, -1, dim)# (b,n_atom,n_embed) expand (b,n_atom,1,n_embed)->(b,n_atom*n_atom,n_embed) 提供切空间
-                x_map = x.unsqueeze(1).expand(-1, n, -1, -1).reshape(b, -1, dim)# (b,n_atom,n_embed) expand (b,1,n_atom,n_embed)->(b,n_atom*n_atom,n_embed) 要映射的向量
-                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)  # (b,n_atom,n_atom,n_embed) 第二个维度所有原子在第一个维度原子的切空间
-                # print('x_local_tangent:', torch.isnan(x_local_tangent).any())
-                x_tangent_self = self.manifold.logmap(x, x, c=self.c)  # (b,n_atom,n_embed)
-                adj_att = self.att(x_local_tangent, x_tangent_self, adj).unsqueeze(-1)  # (b,atom_num,atom_num,1)
-
-                att_rep = adj_att * x_local_tangent  # (b,n_atom,n_atom,n_embed)
-                support_t = torch.sum(att_rep, dim=2)  # (b,n_atom,n_embed)
+                _,mask = adj
+                x_provide = x.unsqueeze(2).expand(-1, -1, n, -1).reshape(b, -1,dim)  # (b,n_atom,n_embed) expand (b,n_atom,1,n_embed)->(b,n_atom*n_atom,n_embed) 提供切空间
+                x_map = x.unsqueeze(1).expand(-1, n, -1, -1).reshape(b, -1, dim)  # (b,n_atom,n_embed) expand (b,1,n_atom,n_embed)->(b,n_atom*n_atom,n_embed) 要映射的向量
+                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)*mask.unsqueeze(-1)  # (b,n_atom,n_atom,n_embed) 第二个维度所有原子在第一个维度原子的切空间
+                x_local_tangent = torch.clamp(x_local_tangent, min=-1e3, max=1e3)
+                x_local_self_tangent = self.manifold.logmap(x, x, c=self.c) # (b,n_atom,n_embed)
+                adj_att = self.att(x_local_tangent,x_local_self_tangent, adj)
+                att_rep = adj_att.unsqueeze(-1) * x_local_tangent * mask.unsqueeze(-1)
+                # print('x_tangent:',x_tangent[0])
+                support_t = torch.sum(att_rep, dim=2)
+                # print('support_t:',support_t[0])
                 support_t = self.manifold.proj_tan(support_t, x, self.c)
-                support_t = torch.clamp(support_t, min=-1e6, max=1e6)
-                output = self.manifold.proj(self.manifold.expmap(support_t, x, c=self.c),c=self.c)  # 需要对每个support_t[:,i]从x[:,i]的切空间映射回流形
+                # support_t = torch.clamp(support_t, min=-1e6, max=1e6)
+                output = self.manifold.proj(self.manifold.expmap(support_t, x, c=self.c), c=self.c)
+
                 return output
             else:
                 adj_att = self.att(x_tangent,None, adj)  # (b,atom_num,atom_num)
-                support_t = torch.matmul(adj_att, x_tangent) + x_tangent
+                support_t = torch.matmul(adj_att, x_tangent)
                 support_t = self.manifold.proj_tan0(support_t, self.c)
                 support_t = torch.clamp(support_t, min=-1e6, max=1e6)
                 output = self.manifold.proj(self.manifold.expmap0(support_t, c=self.c), c=self.c)
                 # print(output)
         else:
-            support_t = torch.bmm(adj, x_tangent) # (b,n_atom,n_atom) (b,n_atom,n_embed)
+            support_t = torch.bmm(adj[1], x_tangent) # (b,n_atom,n_atom) (b,n_atom,n_embed)
             output = self.manifold.proj(self.manifold.expmap0(support_t, c=self.c), c=self.c)
 
         return output
