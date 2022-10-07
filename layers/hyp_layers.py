@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn.modules.module import Module
 
-from layers.att_layers import DenseAtt,SpecialSpmm
+from layers.att_layers import DenseAtt
 
 
 def get_dim_act_curv(args):
@@ -44,8 +44,11 @@ class HNNLayer(nn.Module):
         self.hyp_act = HypAct(manifold, c_in, c_out, act)
 
     def forward(self, x):
+        # print('x:', torch.any(torch.isnan(x)))
         h = self.linear.forward(x)
+        # print('linear:', torch.any(torch.isnan(h)))
         h = self.hyp_act.forward(h)
+        # print('hyp_act:', torch.any(torch.isnan(h)))
         return h
 
 
@@ -64,8 +67,11 @@ class HyperbolicGraphConvolution(nn.Module):
         x, adj = input
 
         h = self.linear.forward(x)
+        # print('linear:',torch.any(torch.isnan(h)))
         h = self.agg.forward(h, adj)
+        # print('agg:', torch.any(torch.isnan(h)))
         h = self.hyp_act.forward(h)
+        # print('hyp_act:', torch.any(torch.isnan(h)))
         output = (h, adj)
 
         return output
@@ -130,6 +136,10 @@ class HypAgg(Module):
         self.local_agg = local_agg
         if self.use_att:
             self.att = DenseAtt(in_features, dropout)
+        self.node_mlp = nn.Sequential(
+            nn.Linear(2*in_features, in_features),
+            nn.SiLU(),
+            nn.Linear(in_features, in_features))
 
 
     def forward(self, x, adj):
@@ -142,15 +152,17 @@ class HypAgg(Module):
                 _,mask = adj
                 x_provide = x.unsqueeze(2).expand(-1, -1, n, -1).reshape(b, -1,dim)  # (b,n_atom,n_embed) expand (b,n_atom,1,n_embed)->(b,n_atom*n_atom,n_embed) 提供切空间
                 x_map = x.unsqueeze(1).expand(-1, n, -1, -1).reshape(b, -1, dim)  # (b,n_atom,n_embed) expand (b,1,n_atom,n_embed)->(b,n_atom*n_atom,n_embed) 要映射的向量
-                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)*mask.unsqueeze(-1)  # (b,n_atom,n_atom,n_embed) 第二个维度所有原子在第一个维度原子的切空间
+                x_local_tangent = self.manifold.logmap(x_provide, x_map, c=self.c).reshape(b, n, n,dim)  # (b,n_atom,n_atom,n_embed) 第二个维度所有原子在第一个维度原子的切空间
                 x_local_tangent = torch.clamp(x_local_tangent, min=-1e3, max=1e3)
                 x_local_self_tangent = self.manifold.logmap(x, x, c=self.c) # (b,n_atom,n_embed)
                 adj_att = self.att(x_local_tangent,x_local_self_tangent, adj)
                 att_rep = adj_att.unsqueeze(-1) * x_local_tangent * mask.unsqueeze(-1)
-                # print('x_tangent:',x_tangent[0])
+
                 support_t = torch.sum(att_rep, dim=2)
-                # print('support_t:',support_t[0])
+
+                support_t = self.node_mlp(torch.concat([x_local_self_tangent,support_t],dim=2))+x_local_self_tangent
                 support_t = self.manifold.proj_tan(support_t, x, self.c)
+
                 # support_t = torch.clamp(support_t, min=-1e6, max=1e6)
                 output = self.manifold.proj(self.manifold.expmap(support_t, x, c=self.c), c=self.c)
 
@@ -188,8 +200,12 @@ class HypAct(Module):
 
     def forward(self, x):
         xt = self.act(self.manifold.logmap0(x, c=self.c_in))
+        # print('act:', xt[0])
         xt = self.manifold.proj_tan0(xt, c=self.c_out)
-        return self.manifold.proj(self.manifold.expmap0(xt, c=self.c_out), c=self.c_out)
+        # print('proj_tan0:', xt[0])
+        # print('proj_tan0:', torch.any(torch.isnan(xt)))
+        out = self.manifold.proj(self.manifold.expmap0(xt, c=self.c_out), c=self.c_out)
+        return out
 
     def extra_repr(self):
         return 'c_in={}, c_out={}'.format(

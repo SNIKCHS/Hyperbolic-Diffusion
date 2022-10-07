@@ -3,7 +3,7 @@ import argparse
 from utils.train_utils import add_flags_from_config
 
 config_args = {
-        'lr': 1e-2,  # learning rate 1e-2
+        'lr': 1e-3,  # learning rate 1e-2
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
@@ -29,20 +29,19 @@ config_args = {
         'num_layers':4,
         'n_nodes': None,
         'task': 'rec',
-        'model': 'HGCN',  # ['MLP','HNN','GCN','HGCN'
-        'diff_model':'HGCN',
+        'model': 'HNN',  # ['MLP','HNN','GCN','HGCN'
+        'diff_model':'HNN',
         'dim': 20,  # 隐层的dim
 
-        'max_z': 20,   #'atom type'),
+        'max_z': 10,   #'atom type'),
         'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
         'r': 2.,  # 'fermi-dirac decoder parameter for lp'),
         't': 1., # 'fermi-dirac decoder parameter for lp'),
         'pretrained-embeddings': None,  # 'path to pretrained embeddings (.npy file) for Shallow node classification'),
         'pos-weight': 0, # 'whether to upweight positive class in node classification tasks'),
-        'num-layers': 2, # 'number of hidden layers in encoder'),
         'bias': 0, # 'whether to use bias (1) or not (0)'),
-        'act': 'relu', # 'which activation function to use (or None for no activation)'), silu
+        'act': 'relu', # 'which activation function to use (or None for no activation)'), silu,selu
         'n-heads': 4, # 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': 0.2, # 'alpha for leakyrelu in graph attention networks'),
         'double-precision': '0', # 'whether to use double precision'),

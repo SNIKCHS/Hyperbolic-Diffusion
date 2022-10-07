@@ -72,7 +72,8 @@ class HyperbolicAE(nn.Module):
 
         atom_loss_f = nn.CrossEntropyLoss(reduction='sum')
         pos_loss_f = nn.MSELoss(reduction='sum')
-        loss = (atom_loss_f(atomic_numbers_pred.view(-1,n_type),atomic_numbers.view(-1))+pos_loss_f(positions_pred,positions)) / positions.size(0)
+        # loss = (atom_loss_f(atomic_numbers_pred.view(-1,n_type),atomic_numbers.view(-1))+pos_loss_f(positions_pred,positions)) / positions.size(0)
+        loss = (atom_loss_f(atomic_numbers_pred.view(-1, n_type), atomic_numbers.view(-1))) / positions.size(0)
         return loss
 
 
