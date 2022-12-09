@@ -4,3 +4,9 @@ manifolds/__pycache__/euclidean.cpython-39.pyc
 *.db
 .idea/vcs.xml
 *.npz
+*.log
+*.yaml
+*.json
+*.wandb
+*.txt
+*.xml

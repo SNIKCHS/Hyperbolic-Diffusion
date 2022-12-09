@@ -8,12 +8,21 @@ import optimizers
 import numpy as np
 import logging
 import time
-from tqdm import tqdm
+import wandb
 
 from torch.nn import init
 from schnetpack.nn import AtomDistances, HardCutoff
 from schnetpack import Properties
 from manifolds import Hyperboloid
+no_wandb = False
+# no_wandb = True
+if no_wandb:
+    mode = 'disabled'
+else:
+    mode = 'online'
+kwargs = {'entity': 'elma', 'name': 'gcn', 'project': 'regression',
+          'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
+wandb.init(**kwargs)
 
 qm9data = QM9('./data/qm9.db', download=True, load_only=[QM9.U0])
 qm9split = './data/qm9split'
@@ -90,7 +99,7 @@ def unsorted_segment_sum(data, segment_ids, num_segments, normalization_factor, 
     return result
 def weight_init(m):
     if isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight,gain=0.25)
+        nn.init.xavier_uniform_(m.weight,gain=0.1)
         if m.bias is not None:
             nn.init.constant_(m.bias, 0)
 
@@ -130,7 +139,6 @@ class GCLayer(nn.Module):
         row, col = edges  # 0,0,0...0,1 0,1,2..,0
         x_row = x[row]
         x_col = x[col]
-
         att = self.att(x_row, x_col, distances, edge_mask)  # (b*n_node*n_node,dim)
 
         agg = x_col * att
@@ -170,22 +178,17 @@ class HGCLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        init.xavier_uniform_(self.linear.weight, gain=0.01)
+        # init.xavier_uniform_(self.linear.weight, gain=0.01)
         init.constant_(self.bias, 0.1)
 
     def forward(self, input):
         h, distances, edges, node_mask, edge_mask = input
 
         h = self.HypLinear(h)
-        if torch.any(torch.isnan(h)):
-            print('HypLinear nan')
+
         h = self.HypAgg(h, distances, edges, node_mask, edge_mask)
-        if torch.any(torch.isnan(h)):
-            print('HypAgg nan')
         h = self.HNorm(h)
         h = self.HypAct(h)
-        if torch.any(torch.isnan(h)):
-            print('HypAct nan')
         output = (h, distances, edges, node_mask, edge_mask)
         return output
 
@@ -194,7 +197,6 @@ class HGCLayer(nn.Module):
         x = self.linear(x)
         x = self.manifold.proj_tan0(x, self.c_in)
         x = self.manifold.expmap0(x, self.c_in)
-
         bias = self.manifold.proj_tan0(self.bias.view(1, -1), self.c_in)
         hyp_bias = self.manifold.expmap0(bias, self.c_in)
         res = self.manifold.mobius_add(x, hyp_bias, self.c_in)
@@ -304,8 +306,8 @@ class HGCN(nn.Module):
         # print(output)
         # print(u0)
         loss = torch.sqrt(self.loss_fn(output, u0))
-
-        return loss
+        MAE_loss = torch.nn.functional.l1_loss(output, u0, reduction='mean')
+        return loss, MAE_loss
 
     def get_adj_matrix(self, n_nodes, batch_size):
         # 对每个n_nodes，batch_size只要算一次
@@ -334,7 +336,6 @@ class GCN(nn.Module):
         super().__init__()
         self.device = device
         self.act = nn.SiLU()
-        self.c = 1
         self.Layer = nn.Sequential(
             GCLayer( 20, 128,  self.act),
             GCLayer(128, 128, self.act),
@@ -353,6 +354,7 @@ class GCN(nn.Module):
         )
         self.loss_fn = nn.MSELoss(reduction='mean')
         self.cutoff = HardCutoff()
+        self.apply(weight_init)
 
     def forward(self, inputs):
         atomic_numbers = inputs[Properties.Z]  # (b,n_atom)
@@ -388,8 +390,8 @@ class GCN(nn.Module):
         # print(output)
         # print(u0)
         loss = torch.sqrt(self.loss_fn(output, u0))
-
-        return loss
+        MAE_loss = torch.nn.functional.l1_loss(output, u0,reduction='mean')
+        return loss,MAE_loss
 
     def get_adj_matrix(self, n_nodes, batch_size):
         # 对每个n_nodes，batch_size只要算一次
@@ -413,7 +415,6 @@ class GCN(nn.Module):
             self._edges_dict[n_nodes] = {}
             return self.get_adj_matrix(n_nodes, batch_size)
 import json
-#HGCN step 1463  loss: tensor(136.8320, device='cuda:0', grad_fn=<SqrtBackward0>)  lr:  [0.0001]
 
 class obj(object):
     def __init__(self, dict_):
@@ -421,8 +422,11 @@ class obj(object):
 
 
 args = json.loads(json.dumps(config_args), object_hook=obj)
-device = torch.device('cuda')
+device = torch.device('cpu')
 model = GCN(device)
+total = sum([param.nelement() for param in model.parameters()])
+print("Number of parameter: %.2fM" % (total / 1e6))
+
 optimizer = getattr(optimizers, args.optimizer)(params=model.parameters(), lr=1e-4,
                                                 weight_decay=args.weight_decay)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
@@ -450,12 +454,12 @@ for epoch in range(args.epochs):
 
         t = time.time()
         optimizer.zero_grad()
-        loss = model(input)
+        loss,MAE = model(input)
         if torch.isnan(loss):
             raise AssertionError
         step += 1
-        print('step', step, ' loss:', loss, ' lr: ', lr_scheduler.get_last_lr())
-        # print('KL:',KL)
+        print('step', step, ' loss:', loss,' MAE:',MAE, ' lr: ', lr_scheduler.get_last_lr())
+        wandb.log({"MAE ": MAE}, commit=True)
         # curvatures = list(model.get_submodule('encoder.curvatures'))
         # print('encoder:',curvatures)
         # curvatures = list(model.get_submodule('decoder.curvatures'))
@@ -464,11 +468,6 @@ for epoch in range(args.epochs):
         loss.backward()
         loss_sum += loss
         n += 1
-        # if args.grad_clip is not None:
-        #     max_norm = float(args.grad_clip)
-        #     all_params = list(model.parameters())
-        #     for param in all_params:
-        #         torch.nn.utils.clip_grad_norm_(param, max_norm)
 
         if args.grad_clip is not None:
             grad_clip = float(args.grad_clip)
