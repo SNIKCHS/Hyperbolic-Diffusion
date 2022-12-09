@@ -74,6 +74,7 @@ class HyperbolicAE(nn.Module):
         pos_loss_f = nn.MSELoss(reduction='sum')
         # loss = (atom_loss_f(atomic_numbers_pred.view(-1,n_type),atomic_numbers.view(-1))+pos_loss_f(positions_pred,positions)) / positions.size(0)
         loss = (atom_loss_f(atomic_numbers_pred.view(-1, n_type), atomic_numbers.view(-1))) / positions.size(0)
+        # print(atomic_numbers_pred.view(-1, n_type)[:3], atomic_numbers.view(-1)[:3])
         return loss
 
 

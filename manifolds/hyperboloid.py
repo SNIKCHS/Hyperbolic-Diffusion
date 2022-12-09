@@ -2,10 +2,11 @@
 
 import torch
 
+from manifolds.base import Manifold
 from utils.math_utils import arcosh, cosh, sinh 
 
 
-class Hyperboloid():
+class Hyperboloid(Manifold):
     """
     Hyperboloid manifold class.
 
@@ -15,18 +16,17 @@ class Hyperboloid():
     """
 
     def __init__(self):
-        super().__init__()
+        super(Hyperboloid, self).__init__()
         self.name = 'Hyperboloid'
         self.eps = {torch.float32: 1e-7, torch.float64: 1e-15}
         self.min_norm = 1e-15
         self.max_norm = 1e6
 
     def minkowski_dot(self, x, y, keepdim=True):
-        # (b,1,embeds)*(b,n_atom,embeds)
+        res = torch.sum(x * y, dim=-1) - 2 * x[..., 0] * y[..., 0]
 
-        res = torch.sum(x * y, dim=-1) - (2 * x[..., 0] * y[..., 0]).squeeze()  #(b,n_atom)
         if keepdim:
-            res = res.view(res.shape + (1,)) #(b,n_atom,1)
+            res = res.view(res.shape + (1,))
         return res
 
     def minkowski_norm(self, u, keepdim=True):
@@ -35,7 +35,7 @@ class Hyperboloid():
 
     def sqdist(self, x, y, c):
         """
-        计算x和y的本征距离距离
+        计算x和y的本征距离平方
         :param x:
         :param y:
         :param c:
@@ -45,7 +45,6 @@ class Hyperboloid():
         prod = self.minkowski_dot(x, y)
         theta = torch.clamp(-prod / K, min=1.0 + self.eps[x.dtype])
         sqdist = K * arcosh(theta) ** 2
-        # clamp distance to avoid nans in Fermi-Dirac decoder
         # return torch.clamp(sqdist, max=50.0)
         return sqdist
 
@@ -58,13 +57,12 @@ class Hyperboloid():
         """
         K = 1. / c
         d = x.size(-1) - 1
-        y = x.narrow(-1, 1, d)  # 切片，得到x[:,:,1:]
-
-        y_sqnorm = torch.norm(y, p=2, dim=2, keepdim=True) ** 2
+        y = x.narrow(-1, 1, d)
+        y_sqnorm = torch.norm(y, p=2, dim=1, keepdim=True) ** 2
         mask = torch.ones_like(x)
-        mask[:,:, 0] = 0
+        mask[:, 0] = 0
         vals = torch.zeros_like(x)
-        vals[:,:, 0:1] = torch.sqrt(torch.clamp(K + y_sqnorm, min=self.eps[x.dtype]))
+        vals[:, 0:1] = torch.sqrt(torch.clamp(K + y_sqnorm, min=self.eps[x.dtype]))
         return vals + mask * x   # mask * x = x1:d
 
     def proj_tan(self, u, x, c):
@@ -76,12 +74,12 @@ class Hyperboloid():
         :return:
         """
         K = 1. / c
-        d = x.size(-1) - 1
-        ux = torch.sum(x.narrow(-1, 1, d) * u.narrow(-1, 1, d), dim=2, keepdim=True)
+        d = x.size(1) - 1
+        ux = torch.sum(x.narrow(-1, 1, d) * u.narrow(-1, 1, d), dim=1, keepdim=True)
         mask = torch.ones_like(u)
-        mask[:,:, 0] = 0
+        mask[:, 0] = 0
         vals = torch.zeros_like(u)
-        vals[:,:, 0:1] = ux / torch.clamp(x[:,:, 0:1], min=self.eps[x.dtype])
+        vals[:, 0:1] = ux / torch.clamp(x[:, 0:1], min=self.eps[x.dtype])
         return vals + mask * u
 
     def proj_tan0(self, u, c):
@@ -91,11 +89,10 @@ class Hyperboloid():
         :param c: 曲率
         :return:
         """
-        narrowed = u.narrow(-1, 0, 1) # x[:,:,0]
+        narrowed = u.narrow(-1, 0, 1)
         vals = torch.zeros_like(u)
-        vals[:,:, 0:1] = narrowed
+        vals[:, 0:1] = narrowed
         return u - vals
-
 
     def expmap(self, u, x, c):
         """
@@ -122,25 +119,18 @@ class Hyperboloid():
         :param c:
         :return:
         """
-
-        if len(x.size())<3 :
-            x = x.unsqueeze(1)# x:(b,1,embeds)
         K = 1. / c
-
-        xy = torch.clamp(self.minkowski_dot(x, y) + K, max=-self.eps[x.dtype]) - K  # (b,n_atom,1)
-        # xy = self.minkowski_dot(x, y)  # (b,n_atom,1)
-
-        u = y + xy * x * c  # (b,n_atom,embeds)
+        xy = torch.clamp(self.minkowski_dot(x, y) + K, max=-self.eps[x.dtype]) - K
+        u = y + xy * x * c
         normu = self.minkowski_norm(u)
         normu = torch.clamp(normu, min=self.min_norm)
         dist = self.sqdist(x, y, c) ** 0.5
         result = dist * u / normu
-
         return self.proj_tan(result, x, c)
 
     def expmap0(self, u, c):
         """
-        u从流形映射到原点切空间
+        u从原点切空间映射到流形
         :param u:
         :param c:
         :return:
@@ -148,16 +138,13 @@ class Hyperboloid():
         K = 1. / c
         sqrtK = K ** 0.5
         d = u.size(-1) - 1
-        x = u.narrow(-1, 1, d)  # u[:,:,1:]
-        x_norm = torch.norm(x, p=2, dim=2, keepdim=True)
+        x = u.narrow(-1, 1, d).view(-1, d)
+        x_norm = torch.norm(x, p=2, dim=1, keepdim=True)
         x_norm = torch.clamp(x_norm, min=self.min_norm)
         theta = x_norm / sqrtK
         res = torch.ones_like(u)
-
-        res[:,:, 0:1] = (sqrtK * cosh(theta)).view(res[:,:, 0:1].size())
-        res[:,:, 1:] = (sqrtK * sinh(theta) * x / x_norm).view(res[:,:, 1:].size())
-
-
+        res[:, 0:1] = sqrtK * cosh(theta)
+        res[:, 1:] = sqrtK * sinh(theta) * x / x_norm
         return self.proj(res, c)
 
     def logmap0(self, x, c):
@@ -170,13 +157,12 @@ class Hyperboloid():
         K = 1. / c
         sqrtK = K ** 0.5
         d = x.size(-1) - 1
-        y = x.narrow(-1, 1, d)
-
-        y_norm = torch.norm(y, p=2, dim=2, keepdim=True)
+        y = x.narrow(-1, 1, d).view(-1, d)
+        y_norm = torch.norm(y, p=2, dim=1, keepdim=True)
         y_norm = torch.clamp(y_norm, min=self.min_norm)
         res = torch.zeros_like(x)
-        theta = torch.clamp(x[:,:, 0:1] / sqrtK, min=1.0 + self.eps[x.dtype])
-        res[:,:, 1:] = sqrtK * arcosh(theta) * y / y_norm
+        theta = torch.clamp(x[:, 0:1] / sqrtK, min=1.0 + self.eps[x.dtype])
+        res[:, 1:] = sqrtK * arcosh(theta) * y / y_norm
         return res
 
     def mobius_add(self, x, y, c):
@@ -191,16 +177,15 @@ class Hyperboloid():
 
     def mobius_matvec(self, m, x, c):
         """
-
-        :param m:
+        :param m:参数
         :param x: x在流形上
         :param c:
         :return:
         """
         u = self.logmap0(x, c)
         mu = u @ m.transpose(-1, -2)
-        return self.expmap0(mu, c)
 
+        return self.expmap0(mu, c)
 
     def ptransp(self, x, y, u, c):
         """
@@ -231,13 +216,13 @@ class Hyperboloid():
         sqrtK = K ** 0.5
         x0 = x.narrow(-1, 0, 1)
         d = x.size(-1) - 1
-        y = x.narrow(-1, 1, d)  # x[:,:,1:]
-        y_norm = torch.clamp(torch.norm(y, p=2, dim=2, keepdim=True), min=self.min_norm)
-        y_normalized = y / y_norm  # x[:,:,1:]
+        y = x.narrow(-1, 1, d)
+        y_norm = torch.clamp(torch.norm(y, p=2, dim=1, keepdim=True), min=self.min_norm)
+        y_normalized = y / y_norm
         v = torch.ones_like(x)
-        v[:,:, 0:1] = - y_norm
-        v[:,:, 1:] = (sqrtK - x0) * y_normalized
-        alpha = torch.sum(y_normalized * u[:,:, 1:], dim=2, keepdim=True) / sqrtK  # (b,n_atom,1)
+        v[:, 0:1] = - y_norm 
+        v[:, 1:] = (sqrtK - x0) * y_normalized
+        alpha = torch.sum(y_normalized * u[:, 1:], dim=1, keepdim=True) / sqrtK
         res = u - alpha * v
         return self.proj_tan(res, x, c)
 
@@ -245,5 +230,5 @@ class Hyperboloid():
         K = 1. / c
         sqrtK = K ** 0.5
         d = x.size(-1) - 1
-        return sqrtK * x.narrow(-1, 1, d) / (x[:,:, 0:1] + sqrtK)
+        return sqrtK * x.narrow(-1, 1, d) / (x[:, 0:1] + sqrtK)
 
