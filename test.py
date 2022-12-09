@@ -14,13 +14,13 @@ from torch.nn import init
 from schnetpack.nn import AtomDistances, HardCutoff
 from schnetpack import Properties
 from manifolds import Hyperboloid
-no_wandb = False
-# no_wandb = True
+# no_wandb = False
+no_wandb = True
 if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'gcn', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -99,7 +99,7 @@ def unsorted_segment_sum(data, segment_ids, num_segments, normalization_factor, 
     return result
 def weight_init(m):
     if isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight,gain=0.1)
+        nn.init.xavier_uniform_(m.weight,gain=0.25)
         if m.bias is not None:
             nn.init.constant_(m.bias, 0)
 
@@ -209,7 +209,6 @@ class HGCLayer(nn.Module):
         x_tangent_col = x_tangent[col]
 
         x_local_tangent = self.manifold.logmap(x[row], x[col], c=self.c_in)  # (b*n_node*n_node,dim)  x_col落在x_row的切空间
-        x_local_self_tangent = self.manifold.logmap(x, x, c=self.c_in)
 
         att = self.att(x_tangent_row, x_tangent_col, distances, edge_mask)  # (b*n_node*n_node,dim)
 
@@ -220,11 +219,9 @@ class HGCLayer(nn.Module):
                                    aggregation_method=self.aggregation_method)  # sum掉第二个n_nodes (b*n_nodes*n_nodes,dim)->(b*n_nodes,dim)
 
         out = self.node_mlp(out)
-        out = out + x_local_self_tangent
-        # support_t = torch.clamp(out, min=-1e2, max=1e2)
         support_t = self.manifold.proj_tan(out, x, self.c_in)
-
         output = self.manifold.expmap(support_t, x, c=self.c_in)
+
         return output
 
     def HypAct(self, x):
@@ -423,7 +420,7 @@ class obj(object):
 
 args = json.loads(json.dumps(config_args), object_hook=obj)
 device = torch.device('cpu')
-model = GCN(device)
+model = HGCN(device)
 total = sum([param.nelement() for param in model.parameters()])
 print("Number of parameter: %.2fM" % (total / 1e6))
 
