@@ -26,7 +26,7 @@ if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn_centroids', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn_hyp_embed', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -53,8 +53,7 @@ logging.info(f"Total number of parameters: {tot_params}")
 euc_param = []
 hyp_param = []
 for n,p in model.named_parameters():
-
-    if n == 'centroids.centroid_embedding.weight':
+    if n in ['centroids.centroid_embedding.weight','embedding.weight']:
         hyp_param.append(p)
     else:
         euc_param.append(p)

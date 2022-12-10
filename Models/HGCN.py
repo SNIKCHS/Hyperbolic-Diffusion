@@ -137,6 +137,7 @@ class HGCN(nn.Module):
             HGCLayer(self.manifold, 128, 128, self.c, self.c, self.act),
         )
         self.embedding = nn.Embedding(10, 20)
+        self.manifold.init_embed(self.embedding.weight, self.c,irange=1e-2)
         self.distances = AtomDistances()
         self._edges_dict = {}
         self.out = nn.Sequential(
@@ -176,8 +177,8 @@ class HGCN(nn.Module):
         edges = self.get_adj_matrix(n_nodes, batch_size)
 
         h = h.view(batch_size * n_nodes, -1)
-        h = self.manifold.proj_tan0(h, self.c)
-        h = self.manifold.expmap0(h, self.c)
+        # h = self.manifold.proj_tan0(h, self.c)
+        # h = self.manifold.expmap0(h, self.c)
         distance = distance.view(batch_size * n_nodes * n_nodes, 1)
         node_mask = node_mask.view(batch_size * n_nodes, -1)
         edge_mask = edge_mask.view(batch_size * n_nodes * n_nodes, 1)
@@ -185,10 +186,10 @@ class HGCN(nn.Module):
 
         input = (h, distance, edges, node_mask, edge_mask)
         output, distances, edges, node_mask, edge_mask = self.Layer(input)
-        # output = self.manifold.logmap0(output, self.c)
-        # output = self.out(output) * node_mask
-        _,output = self.centroids(output,node_mask)
-        output = self.centroids_out(output) * node_mask
+        # output = self.manifold.logmap0(output, self.c) #logmap0反而初始不太能收敛
+        output = self.out(output) * node_mask
+        # _,output = self.centroids(output,node_mask)
+        # output = self.centroids_out(output) * node_mask
         output = output.view(batch_size, n_nodes).sum(1, keepdim=True)
         # print(output)
         # print(u0)

@@ -54,8 +54,6 @@ class CentroidDistance(nn.Module):
             sparse=False,
             scale_grad_by_freq=False,
         )
-
-        # hyp_vars.append(self.centroid_embedding)
         self.manifold.init_embed(self.centroid_embedding.weight,self.c)
 
     def forward(self, node_repr, mask):
