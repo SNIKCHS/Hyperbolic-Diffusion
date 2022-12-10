@@ -1,19 +1,20 @@
-import geoopt.optim
+
 import torch
 from schnetpack.datasets import QM9
 import schnetpack as spk
 import os
 
-from Models.CentroidDistance import CentroidDistance
+from torch.optim import Adam
 from Models.HGCN import HGCN
-from manifolds import Hyperboloid
 from my_config import config_args
-import optimizers
 import numpy as np
 import logging
 import time
 import wandb
 import json
+
+from optimizers import RiemannianAdam
+
 
 class obj(object):
     def __init__(self, dict_):
@@ -25,7 +26,7 @@ if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn_radam5', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn_centroids', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -46,12 +47,20 @@ val_loader = spk.AtomsLoader(val, batch_size=4)
 args = json.loads(json.dumps(config_args), object_hook=obj)
 device = torch.device('cpu')
 model = HGCN(device)
+model = model.to(device)
 tot_params = sum([np.prod(p.size()) for p in model.parameters()])
 logging.info(f"Total number of parameters: {tot_params}")
-optimizer = getattr(optimizers, args.optimizer)(params=model.parameters(), lr=1e-4,
-                                                weight_decay=args.weight_decay)
-# optimizer = geoopt.optim.RiemannianAdam(params=model.parameters(), lr=1e-4,
-#                                                 weight_decay=args.weight_decay)
+euc_param = []
+hyp_param = []
+for n,p in model.named_parameters():
+
+    if n == 'centroids.centroid_embedding.weight':
+        hyp_param.append(p)
+    else:
+        euc_param.append(p)
+
+optimizer = Adam(params=iter(euc_param), lr=1e-4,weight_decay=args.weight_decay)
+Roptimizer = RiemannianAdam(params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer,
     step_size=args.lr_reduce_freq,
@@ -60,7 +69,7 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(
 
 # Train model
 t_total = time.time()
-model = model.to(device)
+
 step = 0
 
 for epoch in range(args.epochs):
@@ -73,6 +82,7 @@ for epoch in range(args.epochs):
 
         t = time.time()
         optimizer.zero_grad()
+        Roptimizer.zero_grad()
         loss,MAE = model(input)
         if torch.isnan(loss):
             raise AssertionError
@@ -87,14 +97,13 @@ for epoch in range(args.epochs):
         loss.backward()
         loss_sum += loss
         n += 1
-
         if args.grad_clip is not None:
             grad_clip = float(args.grad_clip)
             all_params = list(model.parameters())
             for param in all_params:
                 torch.nn.utils.clip_grad_value_(param, grad_clip)
         optimizer.step()
-
+        Roptimizer.step()
         # en_curvatures = model.get_submodule('encoder.curvatures')
         # for p in en_curvatures.parameters():
         #     p.data.clamp_(1e-8)

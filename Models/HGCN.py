@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+
+from Models.CentroidDistance import CentroidDistance
 from layers.att_layers import DenseAtt
 from torch.nn import init
 from schnetpack.nn import AtomDistances, HardCutoff
@@ -145,6 +147,12 @@ class HGCN(nn.Module):
         )
         self.loss_fn = nn.MSELoss(reduction='mean')
         self.cutoff = HardCutoff()
+        self.centroids = CentroidDistance(128,128,self.manifold,self.c)
+        self.centroids_out = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.SiLU(),
+            nn.Linear(64, 1)
+        )
         self.apply(weight_init)
 
     def forward(self, inputs):
@@ -178,7 +186,9 @@ class HGCN(nn.Module):
         input = (h, distance, edges, node_mask, edge_mask)
         output, distances, edges, node_mask, edge_mask = self.Layer(input)
         # output = self.manifold.logmap0(output, self.c)
-        output = self.out(output) * node_mask
+        # output = self.out(output) * node_mask
+        _,output = self.centroids(output,node_mask)
+        output = self.centroids_out(output) * node_mask
         output = output.view(batch_size, n_nodes).sum(1, keepdim=True)
         # print(output)
         # print(u0)

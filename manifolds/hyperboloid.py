@@ -48,7 +48,7 @@ class Hyperboloid(Manifold):
         # return torch.clamp(sqdist, max=50.0)
         return sqdist
 
-    def init_embed(self,x,c, irange=1e-2):
+    def init_embed(self,x,c, irange=1e-4):
         x.data.uniform_(-irange, irange)
         x = self.expmap0(x,c)
         return x

@@ -96,7 +96,8 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad = point.grad
                     if grad is None:
                         continue
-                    if isinstance(point, (ManifoldParameter)):
+                    if isinstance(point, ManifoldParameter):
+                        # print(point)
                         manifold = point.manifold
                         c = point.c
                     else:
