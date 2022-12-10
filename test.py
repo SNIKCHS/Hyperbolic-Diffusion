@@ -1,9 +1,12 @@
+import geoopt.optim
 import torch
 from schnetpack.datasets import QM9
 import schnetpack as spk
 import os
 
+from Models.CentroidDistance import CentroidDistance
 from Models.HGCN import HGCN
+from manifolds import Hyperboloid
 from my_config import config_args
 import optimizers
 import numpy as np
@@ -16,13 +19,13 @@ class obj(object):
     def __init__(self, dict_):
         self.__dict__.update(dict_)
 
-# no_wandb = False
-no_wandb = True
+no_wandb = False
+# no_wandb = True
 if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn_gaussatt', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn_radam5', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -47,6 +50,8 @@ tot_params = sum([np.prod(p.size()) for p in model.parameters()])
 logging.info(f"Total number of parameters: {tot_params}")
 optimizer = getattr(optimizers, args.optimizer)(params=model.parameters(), lr=1e-4,
                                                 weight_decay=args.weight_decay)
+# optimizer = geoopt.optim.RiemannianAdam(params=model.parameters(), lr=1e-4,
+#                                                 weight_decay=args.weight_decay)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer,
     step_size=args.lr_reduce_freq,

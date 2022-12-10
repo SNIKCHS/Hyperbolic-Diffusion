@@ -9,7 +9,7 @@ config_args = {
         'device':'cuda',
         'epochs': 200,
         'weight_decay': 0.,
-        'optimizer': 'Adam',
+        'optimizer': 'RiemannianAdam',  #RiemannianAdam Adam
         'momentum': 0.999,
         'patience': 100,
         'seed': 1234,

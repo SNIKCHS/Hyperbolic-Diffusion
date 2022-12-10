@@ -1,5 +1,5 @@
 """Hyperboloid manifold."""
-
+import geoopt
 import torch
 
 from manifolds.base import Manifold
@@ -47,6 +47,27 @@ class Hyperboloid(Manifold):
         sqdist = K * arcosh(theta) ** 2
         # return torch.clamp(sqdist, max=50.0)
         return sqdist
+
+    def init_embed(self,x,c, irange=1e-2):
+        x.data.uniform_(-irange, irange)
+        x = self.expmap0(x,c)
+        return x
+
+    def egrad2rgrad(self, x, grad, c):
+        """
+        :param p: point
+        :param dp: grad
+        :param c:
+        :return:
+        """
+        grad.narrow(-1, 0, 1).mul_(-1)
+        grad = grad.addcmul(self.minkowski_dot(x, grad, keepdim=True), x * c)
+        return grad
+
+    def inner(self, p, c, u, v=None, keepdim=False):
+        if v is None:
+            v = u
+        return self.minkowski_dot(u, v, keepdim=keepdim)
 
     def proj(self, x, c):
         """

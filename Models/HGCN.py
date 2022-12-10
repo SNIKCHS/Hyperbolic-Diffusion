@@ -42,12 +42,12 @@ class HGCLayer(nn.Module):
 
         self.normalization_factor = 100
         self.aggregation_method = 'sum'
-        self.att = DenseAtt(out_features, edge_dim=1)
-        self.node_mlp = nn.Sequential(
-            nn.Linear(out_features, out_features),
-            nn.LayerNorm(out_features),
-            nn.SiLU(),
-            nn.Linear(out_features, out_features))
+        self.att = DenseAtt(out_features, edge_dim=2)
+        # self.node_mlp = nn.Sequential(
+        #     nn.Linear(out_features, out_features),
+        #     nn.LayerNorm(out_features),
+        #     nn.SiLU(),
+        #     nn.Linear(out_features, out_features))
 
         self.c_out = c_out
         self.act = act
@@ -87,17 +87,18 @@ class HGCLayer(nn.Module):
         x_tangent_row = x_tangent[row]
         x_tangent_col = x_tangent[col]
 
-        x_local_tangent = self.manifold.logmap(x[row], x[col], c=self.c_in)  # (b*n_node*n_node,dim)  x_col落在x_row的切空间
-
+        geodesic = self.manifold.sqdist(x[row], x[col],c=self.c_in)
+        distances = torch.cat([distances,geodesic],dim=-1)
         att = self.att(x_tangent_row, x_tangent_col, distances, edge_mask)  # (b*n_node*n_node,dim)
 
+        x_local_tangent = self.manifold.logmap(x[row], x[col], c=self.c_in)  # (b*n_node*n_node,dim)  x_col落在x_row的切空间
         agg = x_local_tangent * att
 
         out = unsorted_segment_sum(agg, row, num_segments=x_tangent.size(0),  # num_segments=b*n_nodes
                                    normalization_factor=self.normalization_factor,
                                    aggregation_method=self.aggregation_method)  # sum掉第二个n_nodes (b*n_nodes*n_nodes,dim)->(b*n_nodes,dim)
 
-        out = self.node_mlp(out)
+        # out = self.node_mlp(out)
         support_t = self.manifold.proj_tan(out, x, self.c_in)
         output = self.manifold.expmap(support_t, x, c=self.c_in)
 
