@@ -1,11 +1,12 @@
-
 import torch
 from schnetpack.datasets import QM9
 import schnetpack as spk
 import os
 
 from torch.optim import Adam
-from Models.HGCN import HGCN
+
+from Models.GCN import GCN
+from Models.HGCN import HGCN,HGNN
 from my_config import config_args
 import numpy as np
 import logging
@@ -26,7 +27,7 @@ if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn_hyp_embed', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -40,16 +41,16 @@ train, val, test = spk.train_test_split(
     split_file=os.path.join(qm9split, "split30000-10000.npz"),
 )
 
-train_loader = spk.AtomsLoader(train, batch_size=4, shuffle=False)
-val_loader = spk.AtomsLoader(val, batch_size=4)
+train_loader = spk.AtomsLoader(train, batch_size=64, shuffle=False)
+val_loader = spk.AtomsLoader(val, batch_size=64)
 
 
 args = json.loads(json.dumps(config_args), object_hook=obj)
-device = torch.device('cpu')
-model = HGCN(device)
+device = torch.device('cuda')
+model = HGCN(device,args)
 model = model.to(device)
-tot_params = sum([np.prod(p.size()) for p in model.parameters()])
-logging.info(f"Total number of parameters: {tot_params}")
+total = sum([param.nelement() for param in model.parameters()])
+print("Number of parameter: %.2fM" % (total / 1e6))
 euc_param = []
 hyp_param = []
 for n,p in model.named_parameters():
@@ -59,7 +60,9 @@ for n,p in model.named_parameters():
         euc_param.append(p)
 
 optimizer = Adam(params=iter(euc_param), lr=1e-4,weight_decay=args.weight_decay)
-Roptimizer = RiemannianAdam(params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
+Roptimizer = RiemannianAdam(curvatures=model.curvatures,params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
+# Roptimizer = RiemannianAdam(curvatures=[1],params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
+# optimizer = Adam(params=model.parameters(), lr=1e-4,weight_decay=args.weight_decay)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer,
     step_size=args.lr_reduce_freq,
@@ -69,12 +72,15 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(
 # Train model
 t_total = time.time()
 
-step = 0
+
 
 for epoch in range(args.epochs):
+    step = 0
     model.train()
-    loss_sum, n, t = 0, 0, 0.0
+    MAE_sum,  t = 0,  0
     counter = 0
+    n_iterations = len(train_loader)
+    n_test_iterations = len(val_loader)
     for input in (train_loader):
         for key in input:
             input[key] = input[key].to(device)
@@ -86,16 +92,20 @@ for epoch in range(args.epochs):
         if torch.isnan(loss):
             raise AssertionError
         step += 1
-        print('step', step, ' loss:', loss,' MAE:',MAE, ' lr: ', lr_scheduler.get_last_lr())
-        wandb.log({"MAE ": MAE}, commit=True)
-        # curvatures = list(model.get_submodule('encoder.curvatures'))
-        # print('encoder:',curvatures)
-        # curvatures = list(model.get_submodule('decoder.curvatures'))
-        # print('decoder:',curvatures)
+        str = " ".join(['Epoch: {:04d}'.format(epoch + 1),
+                        'step:{:04d}/{:04d}'.format(step,n_iterations),
+                        'MAE: {:.4f}'.format(MAE),
+                        'lr: {}'.format(lr_scheduler.get_last_lr()[0]),
+                        'time: {:.4f}s'.format(time.time() - t)
+                        ])
+
+        print(str)
+        wandb.log({'epoch':epoch,"MAE ": MAE}, commit=True)
+        # curvatures = list(model.get_submodule('curvatures'))
+        # print('curvatures:',curvatures)
 
         loss.backward()
-        loss_sum += loss
-        n += 1
+        MAE_sum += MAE
         if args.grad_clip is not None:
             grad_clip = float(args.grad_clip)
             all_params = list(model.parameters())
@@ -113,7 +123,25 @@ for epoch in range(args.epochs):
     if (epoch + 1) % args.log_freq == 0:
         str = " ".join(['Epoch: {:04d}'.format(epoch + 1),
                         'lr: {}'.format(lr_scheduler.get_last_lr()[0]),
-                        'loss: {:.4f}'.format(loss_sum / n),
+                        'MAE: {:.4f}'.format(MAE / step),
                         'time: {:.4f}s'.format(time.time() - t)
                         ])
         print(str)
+    with torch.no_grad():
+        step,MAE_epoch = 0,0
+        for input in (val_loader):
+            for key in input:
+                input[key] = input[key].to(device)
+            loss,MAE = model(input)
+            if torch.isnan(loss):
+                raise AssertionError
+            step += 1
+            str = " ".join(['step: {:04d}'.format(step),
+                            'MAE: {:.4f}'.format(MAE),
+                            'lr: {}'.format(lr_scheduler.get_last_lr()[0]),
+                            'time: {:.4f}s'.format(time.time() - t)
+                            ])
+            print(str)
+            MAE_epoch += MAE.item()
+        print('epoch:',epoch,'test_mean_MAE:',MAE_epoch/step)
+        wandb.log({'epoch':epoch,"test_mean_MAE": MAE_epoch/step}, commit=True)

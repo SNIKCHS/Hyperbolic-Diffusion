@@ -10,3 +10,4 @@ manifolds/__pycache__/euclidean.cpython-39.pyc
 *.wandb
 *.txt
 *.xml
+*.xml

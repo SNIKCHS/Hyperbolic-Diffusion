@@ -7,7 +7,7 @@ config_args = {
         'dropout': 0.0,  #'dropout probability'
         'cuda': 1,  # 'which cuda device to use (-1 for cpu training)')
         'device':'cuda',
-        'epochs': 200,
+        'epochs': 20,
         'weight_decay': 0.,
         'optimizer': 'RiemannianAdam',  #RiemannianAdam Adam
         'momentum': 0.999,
@@ -26,13 +26,13 @@ config_args = {
         'grad_clip':10,
         'att_logit':'exp', #Specify logit for attention, can be any of [exp, sigmoid, tanh, ... from torch.<loigt>]
 
-        'num_layers':4,
+        'num_layers':5,
         'n_nodes': None,
         'task': 'rec',
         'model': 'HGCN',  # ['MLP','HNN','GCN','HGCN'
         'diff_model':'HGCN',
         'dim': 20,  # 隐层的dim
-
+        'hidden_dim':128,
         'max_z': 10,   #'atom type'),
         'manifold': 'Hyperboloid',   # 'which manifold to use, can be any of [Euclidean, Hyperboloid, PoincareBall]'),
         'c': None,  # 'hyperbolic radius, set to None for trainable curvature'),
@@ -41,7 +41,7 @@ config_args = {
         'pretrained-embeddings': None,  # 'path to pretrained embeddings (.npy file) for Shallow node classification'),
         'pos-weight': 0, # 'whether to upweight positive class in node classification tasks'),
         'bias': 0, # 'whether to use bias (1) or not (0)'),
-        'act': 'selu', # 'which activation function to use (or None for no activation)'), silu,selu
+        'act': 'silu', # 'which activation function to use (or None for no activation)'), silu,selu
         'n-heads': 4, # 'number of attention heads for graph attention networks, must be a divisor dim'),
         'alpha': 0.2, # 'alpha for leakyrelu in graph attention networks'),
         'double-precision': '0', # 'whether to use double precision'),

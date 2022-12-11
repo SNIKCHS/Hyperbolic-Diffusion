@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 
+from layers.att_layers import DenseAtt
+
 
 def get_dim_act(args):
     """
@@ -52,11 +54,11 @@ class GCLayer(nn.Module):
         self.normalization_factor = 100
         self.aggregation_method = 'sum'
         self.att = DenseAtt(out_features, edge_dim=1)
-        self.node_mlp = nn.Sequential(
-            nn.Linear(out_features, out_features),
-            nn.LayerNorm(out_features),
-            nn.SiLU(),
-            nn.Linear(out_features, out_features))
+        # self.node_mlp = nn.Sequential(
+        #     nn.Linear(out_features, out_features),
+        #     nn.LayerNorm(out_features),
+        #     nn.SiLU(),
+        #     nn.Linear(out_features, out_features))
         self.act = act
 
         self.ln = nn.LayerNorm(out_features)
@@ -85,7 +87,7 @@ class GCLayer(nn.Module):
                                    normalization_factor=self.normalization_factor,
                                    aggregation_method=self.aggregation_method)  # sum掉第二个n_nodes (b*n_nodes*n_nodes,dim)->(b*n_nodes,dim)
 
-        out = self.node_mlp(out)
+        # out = self.node_mlp(out)
         out = out + x
         return out
 

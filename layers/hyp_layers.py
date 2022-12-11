@@ -21,14 +21,16 @@ def get_dim_act_curv(args):
     else:
         act = getattr(F, args.act)
     acts = [act] * (args.num_layers)  # len=args.num_layers
-    dims = [args.dim] * (args.num_layers+1)  # len=args.num_layers+1
+    # dims = [args.dim] * (args.num_layers + 1)  # len=args.num_layers+1
+    dims = [args.dim] + [args.hidden_dim] * (args.num_layers)  # len=args.num_layers+1
+    # dims = [args.dim] + [args.hidden_dim] * (args.num_layers)  # len=args.num_layers+1
 
     if args.c is None:
         # create list of trainable curvature parameters
-        curvatures = nn.ParameterList([nn.Parameter(torch.Tensor([1.])) for _ in range(args.num_layers+1)])
+        curvatures = nn.ParameterList([nn.Parameter(torch.Tensor([1.])) for _ in range(args.num_layers + 1)])
     else:
         # fixed curvature
-        curvatures = [torch.tensor([args.c]).to(args.device) for _ in range(args.num_layers+1)]
+        curvatures = [torch.tensor([args.c]).to(args.device) for _ in range(args.num_layers + 1)]
 
     return dims, acts, curvatures
 

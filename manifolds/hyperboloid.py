@@ -1,10 +1,7 @@
 """Hyperboloid manifold."""
-import geoopt
 import torch
-
 from manifolds.base import Manifold
-from utils.math_utils import arcosh, cosh, sinh 
-
+from utils.math_utils import arcosh, cosh, sinh
 
 class Hyperboloid(Manifold):
     """

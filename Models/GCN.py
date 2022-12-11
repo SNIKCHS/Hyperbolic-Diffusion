@@ -11,7 +11,7 @@ def weight_init(m):
         if m.bias is not None:
             nn.init.constant_(m.bias, 0)
 class GCN(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device,args):
         super().__init__()
         self.device = device
         self.act = nn.SiLU()

@@ -7,11 +7,6 @@
 import torch
 import torch as th
 import torch.nn as nn
-
-from manifolds import Hyperboloid,Euclidean
-from geoopt import ManifoldParameter
-from geoopt import Lorentz
-
 def init_weight(weight, method):
     """
     Initialize parameters
@@ -39,16 +34,8 @@ class CentroidDistance(nn.Module):
         self.manifold = manifold
         self.c = c
         # centroid embedding
-        # self.centroid_embedding = nn.Embedding(
-        #     args.num_centroid, args.dim,
-        #     sparse=False,
-        #     scale_grad_by_freq=False,
-        # )
         self.num_centroid = num_centroid
         self.dim = dim
-        # self.centroid_embedding = nn.Parameter(
-        #     torch.zeros(num_centroid, dim),requires_grad=True
-        # )
         self.centroid_embedding = nn.Embedding(
             num_centroid, dim,
             sparse=False,

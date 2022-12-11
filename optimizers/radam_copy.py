@@ -1,13 +1,11 @@
 import torch.optim
 
-from geoopt.optim.mixin import OptimMixin
-
 __all__ = ["RiemannianAdam"]
 
 from manifolds import Hyperboloid
 
 
-class RiemannianAdam(OptimMixin, torch.optim.Adam):
+class RiemannianAdam(torch.optim.Adam):
     r"""
     Riemannian Adam with the same API as :class:`torch.optim.Adam`.
 
@@ -42,6 +40,10 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
         https://openreview.net/forum?id=ryQu7f-RZ
 
     """
+    def __init__(self,curvatures, params, lr=0.001, betas=(0.9,0.999), eps=1e-8, weight_decay=0, amsgrad=False):
+        super(RiemannianAdam, self).__init__(params=params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+        self.c = curvatures[0]
+        self.manifold = Hyperboloid()
 
     def step(self, closure=None):
         loss = None
@@ -58,7 +60,7 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     grad = point.grad
                     if grad is None:
                         continue
-                    manifold = Hyperboloid()
+
                     state = self.state[point]
                     # State initialization
                     if len(state) == 0:
@@ -76,10 +78,10 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     exp_avg_sq = state["exp_avg_sq"]
                     # actual step
                     grad.add_(point, alpha=weight_decay)
-                    grad = manifold.egrad2rgrad(point, grad,1)
+                    grad = self.manifold.egrad2rgrad(point, grad,self.c)
                     exp_avg.mul_(betas[0]).add_(grad, alpha=1 - betas[0])
                     exp_avg_sq.mul_(betas[1]).add_(
-                        manifold.inner(point,c=1,u=grad,keepdim=True), alpha=1 - betas[1]
+                        self.manifold.inner(point,c=self.c,u=grad,keepdim=True), alpha=1 - betas[1]
                     )
                     bias_correction1 = 1 - betas[0] ** state["step"]
                     bias_correction2 = 1 - betas[1] ** state["step"]
@@ -95,8 +97,8 @@ class RiemannianAdam(OptimMixin, torch.optim.Adam):
                     # get the direction for ascend
                     direction = exp_avg.div(bias_correction1) / denom.add_(eps)
                     # transport the exponential averaging to the new point
-                    new_point = manifold.proj(manifold.expmap(-learning_rate * direction, point, 1), 1)
-                    exp_avg_new = manifold.ptransp(point, new_point, exp_avg, 1)
+                    new_point = self.manifold.proj(self.manifold.expmap(-learning_rate * direction, point, self.c), self.c)
+                    exp_avg_new = self.manifold.ptransp(point, new_point, exp_avg, self.c)
                     # use copy only for user facing point
 
                     point.copy_(new_point)

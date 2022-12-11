@@ -6,7 +6,11 @@ from layers.att_layers import DenseAtt
 from torch.nn import init
 from schnetpack.nn import AtomDistances, HardCutoff
 from schnetpack import Properties
+
+from layers.hyp_layers import get_dim_act_curv
 from manifolds import Hyperboloid
+from manifolds.poincare import PoincareBall
+
 
 def weight_init(m):
     if isinstance(m, nn.Linear):
@@ -121,39 +125,40 @@ class HGCLayer(nn.Module):
         h = self.manifold.expmap0(h, c=self.c_in)
         return h
 
-
 class HGCN(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device,args):
         super().__init__()
         self.device = device
         self.manifold = Hyperboloid()
-        self.act = nn.SiLU()
-        self.c = 1
-        self.Layer = nn.Sequential(
-            HGCLayer(self.manifold, 20, 128, self.c, self.c, self.act),
-            HGCLayer(self.manifold, 128, 128, self.c, self.c, self.act),
-            HGCLayer(self.manifold, 128, 128, self.c, self.c, self.act),
-            HGCLayer(self.manifold, 128, 128, self.c, self.c, self.act),
-            HGCLayer(self.manifold, 128, 128, self.c, self.c, self.act),
-        )
-        self.embedding = nn.Embedding(10, 20)
-        self.manifold.init_embed(self.embedding.weight, self.c,irange=1e-2)
+        dims, acts, self.curvatures = get_dim_act_curv(args)
+        layers = []
+        for i in range(args.num_layers):
+            c_in, c_out = self.curvatures[i], self.curvatures[i + 1]
+            in_dim, out_dim = dims[i], dims[i + 1]
+            act = acts[i]
+            layers.append(
+                HGCLayer(
+                    self.manifold, in_dim, out_dim, c_in, c_out, act
+                )
+            )
+        self.layers = nn.Sequential(*layers)
+        self.embedding = nn.Embedding(10, dims[0])
+        self.manifold.init_embed(self.embedding.weight, self.curvatures[0],irange=1e-2)
         self.distances = AtomDistances()
         self._edges_dict = {}
         self.out = nn.Sequential(
             nn.Linear(128, 64),
             nn.SiLU(),
-            # ResBlock(64),
             nn.Linear(64, 1)
         )
         self.loss_fn = nn.MSELoss(reduction='mean')
         self.cutoff = HardCutoff()
-        self.centroids = CentroidDistance(128,128,self.manifold,self.c)
-        self.centroids_out = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.SiLU(),
-            nn.Linear(64, 1)
-        )
+        # self.centroids = CentroidDistance(128,128,self.manifold,self.c)
+        # self.centroids_out = nn.Sequential(
+        #     nn.Linear(128, 64),
+        #     nn.SiLU(),
+        #     nn.Linear(64, 1)
+        # )
         self.apply(weight_init)
 
     def forward(self, inputs):
@@ -173,6 +178,7 @@ class HGCN(nn.Module):
         nbh = ar * edge_mask
         h = self.embedding(atomic_numbers)  # (b,n_atom,embed)
 
+
         distance = self.distances(positions, nbh.long(), neighbor_mask=edge_mask.bool())
         edges = self.get_adj_matrix(n_nodes, batch_size)
 
@@ -184,8 +190,9 @@ class HGCN(nn.Module):
         edge_mask = edge_mask.view(batch_size * n_nodes * n_nodes, 1)
         edge_mask = self.cutoff(distance) * edge_mask
 
+        h = self.manifold.proj(h, self.curvatures[0])
         input = (h, distance, edges, node_mask, edge_mask)
-        output, distances, edges, node_mask, edge_mask = self.Layer(input)
+        output, distances, edges, node_mask, edge_mask = self.layers(input)
         # output = self.manifold.logmap0(output, self.c) #logmap0反而初始不太能收敛
         output = self.out(output) * node_mask
         # _,output = self.centroids(output,node_mask)
@@ -218,3 +225,143 @@ class HGCN(nn.Module):
         else:
             self._edges_dict[n_nodes] = {}
             return self.get_adj_matrix(n_nodes, batch_size)
+
+class HGNLayer(nn.Module):
+    def __init__(self, manifold, in_features, out_features, c, act):
+        super().__init__()
+        self.manifold = manifold
+        self.in_features = in_features
+        self.out_features = out_features
+        self.c = c
+        self.linear = nn.Linear(in_features, out_features, bias=False)
+        self.normalization_factor = 100
+        self.aggregation_method = 'sum'
+        self.att = DenseAtt(out_features, edge_dim=1)
+        self.act = act
+        if self.manifold.name == 'Hyperboloid':
+            self.ln = nn.LayerNorm(out_features - 1)
+        else:
+            self.ln = nn.LayerNorm(out_features)
+
+    def forward(self, input):
+        h, distances, edges, node_mask, edge_mask = input
+        h = self.manifold.logmap0(h,self.c)
+        h = self.linear(h)
+        row, col = edges
+        h_row = h[row]
+        h_col = h[col]
+        att = self.att(h_row, h_col, distances, edge_mask)
+        h_col = h_col * att
+
+        out = unsorted_segment_sum(h_col, row, num_segments=h.size(0),  # num_segments=b*n_nodes
+                                   normalization_factor=self.normalization_factor,
+                                   aggregation_method=self.aggregation_method)
+        out[..., 1:] = self.ln(out[..., 1:].clone())
+        out = self.manifold.proj_tan0(out, self.c)
+        out = self.manifold.expmap0(out, c=self.c)
+        out = self.manifold.to_poincare(out,self.c)
+        out = self.act(out)
+        out = PoincareBall().to_hyperboloid(out, self.c)
+
+        output = (out, distances, edges, node_mask, edge_mask)
+        return output
+
+class HGNN(nn.Module):
+    def __init__(self, device,args):
+        super().__init__()
+        self.device = device
+        self.manifold = Hyperboloid()
+        dims, acts, _ = get_dim_act_curv(args)
+        self.curvature = 1
+        layers = []
+        for i in range(args.num_layers):
+            in_dim, out_dim = dims[i], dims[i + 1]
+            act = acts[i]
+            layers.append(
+                HGNLayer(
+                    self.manifold, in_dim, out_dim, self.curvature, act
+                )
+            )
+        self.layers = nn.Sequential(*layers)
+        self.embedding = nn.Embedding(10, dims[0])
+        self.manifold.init_embed(self.embedding.weight, self.curvature,irange=1e-2)
+        self.distances = AtomDistances()
+        self._edges_dict = {}
+        self.out = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.SiLU(),
+            nn.Linear(64, 1)
+        )
+        self.loss_fn = nn.MSELoss(reduction='mean')
+        self.cutoff = HardCutoff()
+        self.centroids = CentroidDistance(128,128,self.manifold,self.curvature)
+        self.centroids_out = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.SiLU(),
+            nn.Linear(64, 1)
+        )
+        self.apply(weight_init)
+
+    def forward(self, inputs):
+        atomic_numbers = inputs[Properties.Z]  # (b,n_atom)
+        positions = inputs[Properties.R]  # (b,n_atom,3)
+        positions -= positions.mean(dim=1, keepdim=True)
+        node_mask = inputs[Properties.atom_mask]  # (b,n_atom)
+        u0 = inputs['energy_U0']
+        batch_size, n_nodes = atomic_numbers.size()
+
+        size = node_mask.size()
+        edge_mask = node_mask.unsqueeze(2).expand(size[0], size[1], size[1])  # (b,n_atom,n_atom)
+        edge_mask = edge_mask * edge_mask.permute(0, 2, 1)
+
+        ar = torch.arange(atomic_numbers.size(1), device=atomic_numbers.device)[None, None, :].repeat(
+            atomic_numbers.size(0), atomic_numbers.size(1), 1)  # (b,n_atom,n_atom)
+        nbh = ar * edge_mask
+        h = self.embedding(atomic_numbers)  # (b,n_atom,embed)
+
+        distance = self.distances(positions, nbh.long(), neighbor_mask=edge_mask.bool())
+        edges = self.get_adj_matrix(n_nodes, batch_size)
+
+        h = h.view(batch_size * n_nodes, -1)
+
+        distance = distance.view(batch_size * n_nodes * n_nodes, 1)
+        node_mask = node_mask.view(batch_size * n_nodes, -1)
+        edge_mask = edge_mask.view(batch_size * n_nodes * n_nodes, 1)
+        edge_mask = self.cutoff(distance) * edge_mask
+
+        h = self.manifold.proj(h, self.curvature)
+        input = (h, distance, edges, node_mask, edge_mask)
+        output, distances, edges, node_mask, edge_mask = self.layers(input)
+        # output = self.manifold.logmap0(output, self.c) #logmap0反而初始不太能收敛
+        # output = self.out(output) * node_mask
+        _,output = self.centroids(output,node_mask)
+        output = self.centroids_out(output) * node_mask
+        output = output.view(batch_size, n_nodes).sum(1, keepdim=True)
+        # print(output)
+        # print(u0)
+        loss = torch.sqrt(self.loss_fn(output, u0))
+        MAE_loss = torch.nn.functional.l1_loss(output, u0, reduction='mean')
+        return loss, MAE_loss
+
+    def get_adj_matrix(self, n_nodes, batch_size):
+        # 对每个n_nodes，batch_size只要算一次
+        if n_nodes in self._edges_dict:
+            edges_dic_b = self._edges_dict[n_nodes]
+            if batch_size in edges_dic_b:
+                return edges_dic_b[batch_size]
+            else:
+                # get edges for a single sample
+                rows, cols = [], []
+                for batch_idx in range(batch_size):
+                    for i in range(n_nodes):
+                        for j in range(n_nodes):
+                            rows.append(i + batch_idx * n_nodes)
+                            cols.append(j + batch_idx * n_nodes)
+                edges = [torch.LongTensor(rows).to(self.device),
+                         torch.LongTensor(cols).to(self.device)]
+                edges_dic_b[batch_size] = edges
+                return edges
+        else:
+            self._edges_dict[n_nodes] = {}
+            return self.get_adj_matrix(n_nodes, batch_size)
+
