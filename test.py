@@ -27,7 +27,7 @@ if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn_noHyperEmbed', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -54,15 +54,16 @@ print("Number of parameter: %.2fM" % (total / 1e6))
 euc_param = []
 hyp_param = []
 for n,p in model.named_parameters():
-    if n in ['centroids.centroid_embedding.weight','embedding.weight']:
+    # if n in ['centroids.centroid_embedding.weight','embedding.weight']:
+    if n in ['embedding.weight']:
         hyp_param.append(p)
     else:
         euc_param.append(p)
 
-optimizer = Adam(params=iter(euc_param), lr=1e-4,weight_decay=args.weight_decay)
-Roptimizer = RiemannianAdam(curvatures=model.curvatures,params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
+# optimizer = Adam(params=iter(euc_param), lr=1e-4,weight_decay=args.weight_decay)
+# Roptimizer = RiemannianAdam(curvatures=model.curvatures,params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
 # Roptimizer = RiemannianAdam(curvatures=[1],params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
-# optimizer = Adam(params=model.parameters(), lr=1e-4,weight_decay=args.weight_decay)
+optimizer = Adam(params=model.parameters(), lr=1e-4,weight_decay=args.weight_decay)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(
     optimizer,
     step_size=args.lr_reduce_freq,
@@ -87,7 +88,7 @@ for epoch in range(args.epochs):
 
         t = time.time()
         optimizer.zero_grad()
-        Roptimizer.zero_grad()
+        # Roptimizer.zero_grad()
         loss,MAE = model(input)
         if torch.isnan(loss):
             raise AssertionError
@@ -112,7 +113,7 @@ for epoch in range(args.epochs):
             for param in all_params:
                 torch.nn.utils.clip_grad_value_(param, grad_clip)
         optimizer.step()
-        Roptimizer.step()
+        # Roptimizer.step()
         # en_curvatures = model.get_submodule('encoder.curvatures')
         # for p in en_curvatures.parameters():
         #     p.data.clamp_(1e-8)
@@ -138,7 +139,6 @@ for epoch in range(args.epochs):
             step += 1
             str = " ".join(['step: {:04d}'.format(step),
                             'MAE: {:.4f}'.format(MAE),
-                            'lr: {}'.format(lr_scheduler.get_last_lr()[0]),
                             'time: {:.4f}s'.format(time.time() - t)
                             ])
             print(str)

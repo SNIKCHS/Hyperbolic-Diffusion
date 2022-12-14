@@ -153,7 +153,7 @@ class HGCN(nn.Module):
         )
         self.loss_fn = nn.MSELoss(reduction='mean')
         self.cutoff = HardCutoff()
-        # self.centroids = CentroidDistance(128,128,self.manifold,self.c)
+        # self.centroids = CentroidDistance(128,128,self.manifold,self.curvatures[-1])
         # self.centroids_out = nn.Sequential(
         #     nn.Linear(128, 64),
         #     nn.SiLU(),
@@ -178,19 +178,18 @@ class HGCN(nn.Module):
         nbh = ar * edge_mask
         h = self.embedding(atomic_numbers)  # (b,n_atom,embed)
 
-
         distance = self.distances(positions, nbh.long(), neighbor_mask=edge_mask.bool())
         edges = self.get_adj_matrix(n_nodes, batch_size)
 
         h = h.view(batch_size * n_nodes, -1)
-        # h = self.manifold.proj_tan0(h, self.c)
-        # h = self.manifold.expmap0(h, self.c)
+        h = self.manifold.proj_tan0(h, self.curvatures[0])
+        h = self.manifold.expmap0(h, self.curvatures[0])
         distance = distance.view(batch_size * n_nodes * n_nodes, 1)
         node_mask = node_mask.view(batch_size * n_nodes, -1)
         edge_mask = edge_mask.view(batch_size * n_nodes * n_nodes, 1)
         edge_mask = self.cutoff(distance) * edge_mask
 
-        h = self.manifold.proj(h, self.curvatures[0])
+        # h = self.manifold.proj(h, self.curvatures[0])
         input = (h, distance, edges, node_mask, edge_mask)
         output, distances, edges, node_mask, edge_mask = self.layers(input)
         # output = self.manifold.logmap0(output, self.c) #logmap0反而初始不太能收敛
