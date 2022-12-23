@@ -1,6 +1,6 @@
 """Hyperbolic layers."""
 import math
-
+import geoopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,12 +27,12 @@ def get_dim_act_curv(args):
 
     if args.c is None:
         # create list of trainable curvature parameters
-        curvatures = nn.ParameterList([nn.Parameter(torch.Tensor([1.])) for _ in range(args.num_layers + 1)])
+        manifolds = [geoopt.Lorentz(learnable=True) for _ in range(args.num_layers + 1)]
     else:
         # fixed curvature
-        curvatures = [torch.tensor([args.c]).to(args.device) for _ in range(args.num_layers + 1)]
+        manifolds = [geoopt.Lorentz(args.c, learnable=False) for _ in range(args.num_layers + 1)]
 
-    return dims, acts, curvatures
+    return dims, acts, manifolds
 
 
 class HNNLayer(nn.Module):

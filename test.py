@@ -102,7 +102,7 @@ for epoch in range(args.epochs):
                         ])
 
         print(str)
-        # print(model.manifold.k)
+        model.show_curvatures()
         wandb.log({"MAE ": MAE}, commit=True)
         # curvatures = list(model.get_submodule('curvatures'))
         # print('curvatures:',curvatures)
