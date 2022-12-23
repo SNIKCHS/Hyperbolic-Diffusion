@@ -27,7 +27,7 @@ if no_wandb:
     mode = 'disabled'
 else:
     mode = 'online'
-kwargs = {'entity': 'elma', 'name': 'hgcn_noHyperEmbed', 'project': 'regression',
+kwargs = {'entity': 'elma', 'name': 'hgcn_geoopt', 'project': 'regression',
           'settings': wandb.Settings(_disable_stats=True), 'reinit': True, 'mode': mode}
 wandb.init(**kwargs)
 
@@ -46,6 +46,7 @@ val_loader = spk.AtomsLoader(val, batch_size=64)
 
 
 args = json.loads(json.dumps(config_args), object_hook=obj)
+print(args.act)
 device = torch.device('cuda')
 model = HGCN(device,args)
 model = model.to(device)
@@ -53,12 +54,12 @@ total = sum([param.nelement() for param in model.parameters()])
 print("Number of parameter: %.2fM" % (total / 1e6))
 euc_param = []
 hyp_param = []
-for n,p in model.named_parameters():
-    # if n in ['centroids.centroid_embedding.weight','embedding.weight']:
-    if n in ['embedding.weight']:
-        hyp_param.append(p)
-    else:
-        euc_param.append(p)
+# for n,p in model.named_parameters():
+#     # if n in ['centroids.centroid_embedding.weight','embedding.weight']:
+#     if n in ['embedding.weight']:
+#         hyp_param.append(p)
+#     else:
+#         euc_param.append(p)
 
 # optimizer = Adam(params=iter(euc_param), lr=1e-4,weight_decay=args.weight_decay)
 # Roptimizer = RiemannianAdam(curvatures=model.curvatures,params=iter(hyp_param), lr=1e-4,weight_decay=args.weight_decay)
@@ -101,7 +102,8 @@ for epoch in range(args.epochs):
                         ])
 
         print(str)
-        wandb.log({'epoch':epoch,"MAE ": MAE}, commit=True)
+        # print(model.manifold.k)
+        wandb.log({"MAE ": MAE}, commit=True)
         # curvatures = list(model.get_submodule('curvatures'))
         # print('curvatures:',curvatures)
 
